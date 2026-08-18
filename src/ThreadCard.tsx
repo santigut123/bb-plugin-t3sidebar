@@ -150,7 +150,7 @@ export function ThreadCard({
               // card — makes a thread at rest read as disabled, and at rest is
               // what most of the list is most of the time.
               "pointer-events-none relative mt-0.5 truncate text-sm text-foreground",
-              thread.isUnread && "font-medium",
+              thread.isUnread && "font-bold",
             )}
           >
             {threadDisplayTitle(thread)}
