@@ -14,6 +14,10 @@ const migrations = [
      snoozed_until  INTEGER,
      snoozed_at     INTEGER
    )`,
+  `CREATE TABLE IF NOT EXISTS project_colors (
+     project_id TEXT PRIMARY KEY,
+     hue        INTEGER NOT NULL
+   )`,
 ];
 
 export interface StoredLifecycleRow {
@@ -30,7 +34,19 @@ interface LifecycleDbRow {
   snoozed_at: number | null;
 }
 
+interface ProjectColorDbRow {
+  project_id: string;
+  hue: number;
+}
+
+export interface StoredProjectColorRow {
+  projectId: string;
+  hue: number;
+}
+
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
+const projectIdSchema = z.object({ projectId: z.string().trim().min(1) });
+const hueSchema = z.number().int().min(0).max(359);
 
 export const t3sidebarRpcContract = defineRpcContract({
   listLifecycle: {
@@ -57,10 +73,33 @@ export const t3sidebarRpcContract = defineRpcContract({
     output: z.object({ ok: z.boolean() }),
   },
   unsnooze: { input: threadIdSchema, output: z.object({ ok: z.boolean() }) },
+  listProjectColors: {
+    input: z.object({}),
+    output: z.object({
+      rows: z.array(
+        z.object({
+          projectId: z.string(),
+          hue: z.number().int().min(0).max(359),
+        }),
+      ),
+    }),
+  },
+  setProjectColor: {
+    input: z.object({
+      projectId: z.string().trim().min(1),
+      hue: hueSchema,
+    }),
+    output: z.object({ ok: z.boolean() }),
+  },
+  resetProjectColor: {
+    input: projectIdSchema,
+    output: z.object({ ok: z.boolean() }),
+  },
 });
 
 /** Channel the frontend re-reads on. */
 export const LIFECYCLE_CHANNEL = "lifecycle";
+export const PROJECT_COLORS_CHANNEL = "project-colors";
 
 export default function plugin(bb: BbPluginApi) {
   const db = bb.storage.database();
@@ -101,6 +140,20 @@ export default function plugin(bb: BbPluginApi) {
     bb.realtime.publish(LIFECYCLE_CHANNEL, { threadId });
   };
 
+  const readProjectColors = (): StoredProjectColorRow[] =>
+    (
+      db
+        .prepare(`SELECT project_id, hue FROM project_colors`)
+        .all() as ProjectColorDbRow[]
+    ).map((row) => ({
+      projectId: row.project_id,
+      hue: row.hue,
+    }));
+
+  const publishProjectColors = (projectId: string): void => {
+    bb.realtime.publish(PROJECT_COLORS_CHANNEL, { projectId });
+  };
+
   bb.rpc.register(t3sidebarRpcContract, {
     async listLifecycle() {
       return { rows: readAll() };
@@ -132,6 +185,25 @@ export default function plugin(bb: BbPluginApi) {
     },
     async unsnooze({ threadId }) {
       clear(threadId);
+      return { ok: true };
+    },
+    async listProjectColors() {
+      return { rows: readProjectColors() };
+    },
+    async setProjectColor({ projectId, hue }) {
+      db.prepare(
+        `INSERT INTO project_colors (project_id, hue)
+         VALUES (?, ?)
+         ON CONFLICT(project_id) DO UPDATE SET hue = excluded.hue`,
+      ).run(projectId, hue);
+      publishProjectColors(projectId);
+      return { ok: true };
+    },
+    async resetProjectColor({ projectId }) {
+      db.prepare(`DELETE FROM project_colors WHERE project_id = ?`).run(
+        projectId,
+      );
+      publishProjectColors(projectId);
       return { ok: true };
     },
   });

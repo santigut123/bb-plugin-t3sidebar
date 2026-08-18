@@ -60,6 +60,16 @@ const listProps = {
   searchQuery: "",
 };
 
+function testRpc(
+  overrides: Record<string, (...args: unknown[]) => unknown> = {},
+) {
+  return {
+    listLifecycle: () => ({ rows: [] }),
+    listProjectColors: () => ({ rows: [] }),
+    ...overrides,
+  };
+}
+
 function render(
   threads: PluginSidebarThread[],
   projects = [{ id: "proj_1", name: "bb", isPersonal: false }],
@@ -68,7 +78,7 @@ function render(
     sidebarThreads: { status: "ready", threads, projects },
     // The lifecycle store is the plugin's own backend; an empty one means
     // every thread is active, which is what these list tests are about.
-    rpc: { listLifecycle: () => ({ rows: [] }) },
+    rpc: testRpc(),
   });
 }
 
@@ -115,7 +125,7 @@ describe("ThreadInbox", () => {
           threads: [thread({ id: "thr_open" })],
           projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
         },
-        rpc: { listLifecycle: () => ({ rows: [] }) },
+        rpc: testRpc(),
       },
     );
     fireEvent.click(screen.getByRole("link"));
@@ -161,7 +171,7 @@ describe("ThreadInbox", () => {
           ],
           projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
         },
-        rpc: { listLifecycle: () => ({ rows: [] }) },
+        rpc: testRpc(),
       },
     );
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
@@ -216,7 +226,7 @@ describe("parking threads", () => {
         threads: [thread({ id: "thr_done", title: "Finished work" })],
         projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
       },
-      rpc: {
+      rpc: testRpc({
         listLifecycle: () => ({
           rows: [
             {
@@ -227,7 +237,7 @@ describe("parking threads", () => {
             },
           ],
         }),
-      },
+      }),
     });
     // The shelf renders once the lifecycle read resolves.
     const shelf = await screen.findByRole("region", { name: "Settled" });
@@ -259,7 +269,7 @@ describe("parking threads", () => {
         projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
       },
       // Settled in the store, but still working: it must stay visible.
-      rpc: {
+      rpc: testRpc({
         listLifecycle: () => ({
           rows: [
             {
@@ -270,7 +280,7 @@ describe("parking threads", () => {
             },
           ],
         }),
-      },
+      }),
     });
     expect(await screen.findByText("Still running")).toBeDefined();
     expect(screen.queryByRole("region", { name: "Settled" })).toBeNull();
@@ -293,13 +303,12 @@ describe("parking threads", () => {
         threads: [thread({ id: "thr_park", title: "Quiet" })],
         projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
       },
-      rpc: {
-        listLifecycle: () => ({ rows: [] }),
+      rpc: testRpc({
         settle: (input) => {
           settled = (input as { threadId: string }).threadId;
           return { ok: true };
         },
-      },
+      }),
     });
     fireEvent.click(await screen.findByLabelText("Settle thread"));
     await waitFor(() => expect(settled).toBe("thr_park"));
@@ -313,7 +322,7 @@ describe("parking threads", () => {
         threads: [thread({ id: "thr_snz", title: "Later" })],
         projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
       },
-      rpc: {
+      rpc: testRpc({
         listLifecycle: () => ({
           rows: [
             {
@@ -324,7 +333,7 @@ describe("parking threads", () => {
             },
           ],
         }),
-      },
+      }),
     });
     const shelf = await screen.findByRole("region", { name: "Snoozed" });
     fireEvent.click(within(shelf).getByRole("button"));
@@ -345,7 +354,14 @@ describe("row context menu", () => {
       within(menu)
         .getAllByRole("menuitem")
         .map((item) => item.textContent),
-    ).toEqual(["Open in split", "Mark unread", "Pin", "Archive", "Delete"]);
+    ).toEqual([
+      "Open in split",
+      "Mark unread",
+      "Pin",
+      "bb color",
+      "Archive",
+      "Delete",
+    ]);
   });
 
   it("routes deletion through the host's confirmation", async () => {
@@ -489,7 +505,7 @@ describe("pull request badge", () => {
         threads: [thread({ id: "thr_pr" })],
         projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
       },
-      rpc: { listLifecycle: () => ({ rows: [] }) },
+      rpc: testRpc(),
       sidebarPullRequests: {
         thr_pr: {
           number: 412,

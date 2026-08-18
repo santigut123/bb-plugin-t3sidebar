@@ -17,6 +17,7 @@ import {
 import { ThreadCard } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
 import { useLifecycle } from "./useLifecycle";
+import { useProjectColors } from "./useProjectColors";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import {
   filterByProject,
@@ -44,6 +45,7 @@ export function ThreadInbox({
   const { status, threads, projects } = useSidebarThreads();
   const actions = useSidebarThreadActions();
   const lifecycle = useLifecycle(threads);
+  const projectColors = useProjectColors();
   const [scope, setScope] = useState<string>(ALL_PROJECTS);
   // One clock for every card in a render, quantized to the minute so the
   // labels do not disagree and do not churn on unrelated re-renders.
@@ -103,6 +105,24 @@ export function ThreadInbox({
     scope === ALL_PROJECTS
       ? "All projects"
       : (projectNameById.get(scope) ?? "All projects");
+  const showProjectAccent = scope === ALL_PROJECTS;
+
+  const threadCardProps = (thread: PluginSidebarThread) => ({
+    thread,
+    projectName: projectNameById.get(thread.projectId) ?? null,
+    projectAccent: projectColors.accentFor(thread.projectId),
+    showProjectAccent,
+    hasCustomProjectColor: projectColors.hasCustomColor(thread.projectId),
+    onSetProjectColor: (hue: number) =>
+      projectColors.setColor(thread.projectId, hue),
+    onResetProjectColor: () => projectColors.resetColor(thread.projectId),
+    isActive: thread.id === activeThreadId,
+    canPark: lifecycle.canPark(thread),
+    onNavigate,
+    onSettle: () => lifecycle.settle(thread.id),
+    onSnooze: (until: number) => lifecycle.snooze(thread.id, until),
+    now,
+  });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -156,34 +176,14 @@ export function ThreadInbox({
             {pinned.length > 0 ? (
               <Shelf label="Pinned">
                 {pinned.map((thread) => (
-                  <ThreadCard
-                    key={thread.id}
-                    thread={thread}
-                    projectName={projectNameById.get(thread.projectId) ?? null}
-                    isActive={thread.id === activeThreadId}
-                    canPark={lifecycle.canPark(thread)}
-                    onNavigate={onNavigate}
-                    onSettle={() => lifecycle.settle(thread.id)}
-                    onSnooze={(until) => lifecycle.snooze(thread.id, until)}
-                    now={now}
-                  />
+                  <ThreadCard key={thread.id} {...threadCardProps(thread)} />
                 ))}
               </Shelf>
             ) : null}
             {inbox.length > 0 ? (
               <Shelf label={pinned.length > 0 ? "Inbox" : null}>
                 {inbox.map((thread) => (
-                  <ThreadCard
-                    key={thread.id}
-                    thread={thread}
-                    projectName={projectNameById.get(thread.projectId) ?? null}
-                    isActive={thread.id === activeThreadId}
-                    canPark={lifecycle.canPark(thread)}
-                    onNavigate={onNavigate}
-                    onSettle={() => lifecycle.settle(thread.id)}
-                    onSnooze={(until) => lifecycle.snooze(thread.id, until)}
-                    now={now}
-                  />
+                  <ThreadCard key={thread.id} {...threadCardProps(thread)} />
                 ))}
               </Shelf>
             ) : null}
@@ -265,7 +265,7 @@ function ParkedShelf({
         </span>
       </button>
       {expanded ? (
-        <ul className="flex flex-col gap-px">
+        <ul className="flex flex-col divide-y divide-sidebar-border/50">
           {threads.map((thread) => (
             <SlimRow
               key={thread.id}
@@ -307,7 +307,7 @@ function Shelf({
           <span className="h-px flex-1 bg-sidebar-border" />
         </h2>
       ) : null}
-      <ul className="flex flex-col gap-px">{children}</ul>
+      <ul className="flex flex-col divide-y divide-sidebar-border/50">{children}</ul>
     </section>
   );
 }

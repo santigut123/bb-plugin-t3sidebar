@@ -11,6 +11,7 @@ import { ProviderGlyph } from "./ProviderGlyph";
 import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
 import { threadDisplayTitle } from "./inbox";
 import { resolveSnoozePresets } from "./lifecycle";
+import type { ProjectAccent } from "./project-colors";
 
 /**
  * One thread as a three-line card: project and status, title, then branch and
@@ -24,6 +25,11 @@ import { resolveSnoozePresets } from "./lifecycle";
 export function ThreadCard({
   thread,
   projectName,
+  projectAccent,
+  showProjectAccent,
+  hasCustomProjectColor,
+  onSetProjectColor,
+  onResetProjectColor,
   isActive,
   canPark,
   onNavigate,
@@ -33,6 +39,12 @@ export function ThreadCard({
 }: {
   thread: PluginSidebarThread;
   projectName: string | null;
+  projectAccent: ProjectAccent;
+  /** False when the list is scoped to one project — the stripe adds no signal. */
+  showProjectAccent: boolean;
+  hasCustomProjectColor: boolean;
+  onSetProjectColor: (hue: number) => void;
+  onResetProjectColor: () => void;
   isActive: boolean;
   /** False while the thread is working or blocked on the user. */
   canPark: boolean;
@@ -49,17 +61,31 @@ export function ThreadCard({
   const { pullRequest } = useSidebarThreadPullRequest(thread.id);
 
   return (
-    <RowContextMenu thread={thread}>
+    <RowContextMenu
+      thread={thread}
+      projectName={projectName}
+      projectHue={projectAccent.hue}
+      hasCustomProjectColor={hasCustomProjectColor}
+      onSetProjectColor={onSetProjectColor}
+      onResetProjectColor={onResetProjectColor}
+    >
       <li className="list-none">
         <div
           className={cn(
-            "group/card relative rounded-md px-2.5 py-2 transition-colors",
+            "group/card relative rounded-md py-2 pl-3 pr-2.5 transition-colors",
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
             // A thread open in another pane gets a weaker tint than the active
             // row, so the two states stay distinguishable.
             !isActive && layout !== null && "bg-sidebar-accent/30",
           )}
         >
+          {showProjectAccent ? (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute bottom-1.5 left-0.5 top-1.5 w-[3px] rounded-full"
+              style={{ backgroundColor: projectAccent.stripe }}
+            />
+          ) : null}
           <a
             // Both attributes, or bb's nine thread shortcuts stop finding rows.
             data-sidebar-thread-shortcut-target=""
@@ -77,8 +103,19 @@ export function ThreadCard({
             className="absolute inset-0 cursor-pointer rounded-md"
           />
           <div className="pointer-events-none relative flex h-5 items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate text-2xs font-medium text-muted-foreground">
-              {projectName ?? " "}
+            <span
+              className="min-w-0 flex-1 truncate text-2xs font-medium"
+              style={
+                showProjectAccent
+                  ? { color: projectAccent.label }
+                  : undefined
+              }
+            >
+              <span
+                className={cn(!showProjectAccent && "text-muted-foreground")}
+              >
+                {projectName ?? " "}
+              </span>
             </span>
             {/* Status at rest, park actions on hover. Only the status yields,
                 so the project name never shifts. */}
