@@ -23,6 +23,13 @@ import {
   parseWorkingShimmerVariant,
   WORKING_SHIMMER_SETTING_KEY,
 } from "./working-shimmer";
+import {
+  CARD_DIVIDERS_SETTING_KEY,
+  parseBooleanSetting,
+  parseUnreadTitleWeight,
+  PROJECT_COLOR_STRIPES_SETTING_KEY,
+  UNREAD_TITLE_WEIGHT_SETTING_KEY,
+} from "./appearance-settings";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import {
   filterByProject,
@@ -54,6 +61,17 @@ export function ThreadInbox({
   const { values: settingsValues } = useSettings();
   const workingShimmer = parseWorkingShimmerVariant(
     settingsValues?.[WORKING_SHIMMER_SETTING_KEY],
+  );
+  const showCardDividers = parseBooleanSetting(
+    settingsValues?.[CARD_DIVIDERS_SETTING_KEY],
+    true,
+  );
+  const projectColorStripes = parseBooleanSetting(
+    settingsValues?.[PROJECT_COLOR_STRIPES_SETTING_KEY],
+    true,
+  );
+  const unreadTitleWeight = parseUnreadTitleWeight(
+    settingsValues?.[UNREAD_TITLE_WEIGHT_SETTING_KEY],
   );
   const [scope, setScope] = useState<string>(ALL_PROJECTS);
   // One clock for every card in a render, quantized to the minute so the
@@ -114,7 +132,8 @@ export function ThreadInbox({
     scope === ALL_PROJECTS
       ? "All projects"
       : (projectNameById.get(scope) ?? "All projects");
-  const showProjectAccent = scope === ALL_PROJECTS;
+  const showProjectAccent =
+    projectColorStripes && scope === ALL_PROJECTS;
 
   const threadCardProps = (thread: PluginSidebarThread) => ({
     thread,
@@ -127,6 +146,7 @@ export function ThreadInbox({
     onResetProjectColor: () => projectColors.resetColor(thread.projectId),
     isWorking: isWorking(thread),
     workingShimmer,
+    unreadTitleWeight,
     isActive: thread.id === activeThreadId,
     canPark: lifecycle.canPark(thread),
     onNavigate,
@@ -185,14 +205,17 @@ export function ThreadInbox({
         ) : (
           <>
             {pinned.length > 0 ? (
-              <Shelf label="Pinned">
+              <Shelf label="Pinned" showCardDividers={showCardDividers}>
                 {pinned.map((thread) => (
                   <ThreadCard key={thread.id} {...threadCardProps(thread)} />
                 ))}
               </Shelf>
             ) : null}
             {inbox.length > 0 ? (
-              <Shelf label={pinned.length > 0 ? "Inbox" : null}>
+              <Shelf
+                label={pinned.length > 0 ? "Inbox" : null}
+                showCardDividers={showCardDividers}
+              >
                 {inbox.map((thread) => (
                   <ThreadCard key={thread.id} {...threadCardProps(thread)} />
                 ))}
@@ -204,6 +227,7 @@ export function ThreadInbox({
               expanded={showSnoozed}
               onToggle={() => setShowSnoozed((open) => !open)}
               shelf="snoozed"
+              showCardDividers={showCardDividers}
               activeThreadId={activeThreadId}
               lifecycle={lifecycle}
               onNavigate={onNavigate}
@@ -214,6 +238,7 @@ export function ThreadInbox({
               expanded={showSettled}
               onToggle={() => setShowSettled((open) => !open)}
               shelf="settled"
+              showCardDividers={showCardDividers}
               activeThreadId={activeThreadId}
               lifecycle={lifecycle}
               onNavigate={onNavigate}
@@ -236,6 +261,7 @@ function ParkedShelf({
   expanded,
   onToggle,
   shelf,
+  showCardDividers,
   activeThreadId,
   lifecycle,
   onNavigate,
@@ -245,6 +271,7 @@ function ParkedShelf({
   expanded: boolean;
   onToggle: () => void;
   shelf: "snoozed" | "settled";
+  showCardDividers: boolean;
   activeThreadId: string | null;
   lifecycle: ReturnType<typeof useLifecycle>;
   onNavigate: () => void;
@@ -276,7 +303,12 @@ function ParkedShelf({
         </span>
       </button>
       {expanded ? (
-        <ul className="flex flex-col divide-y divide-sidebar-border/50">
+        <ul
+          className={cn(
+            "flex flex-col",
+            showCardDividers && "divide-y divide-sidebar-border/50",
+          )}
+        >
           {threads.map((thread) => (
             <SlimRow
               key={thread.id}
@@ -301,9 +333,11 @@ function ParkedShelf({
 
 function Shelf({
   label,
+  showCardDividers,
   children,
 }: {
   label: string | null;
+  showCardDividers: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -318,7 +352,14 @@ function Shelf({
           <span className="h-px flex-1 bg-sidebar-border" />
         </h2>
       ) : null}
-      <ul className="flex flex-col divide-y divide-sidebar-border/50">{children}</ul>
+      <ul
+        className={cn(
+          "flex flex-col",
+          showCardDividers && "divide-y divide-sidebar-border/50",
+        )}
+      >
+        {children}
+      </ul>
     </section>
   );
 }

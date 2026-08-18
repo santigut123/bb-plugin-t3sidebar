@@ -14,6 +14,10 @@ import { resolveSnoozePresets } from "./lifecycle";
 import type { ProjectAccent } from "./project-colors";
 import { WorkingShimmer } from "./WorkingShimmer";
 import type { WorkingShimmerVariant } from "./working-shimmer";
+import {
+  type UnreadTitleWeight,
+  unreadTitleWeightClass,
+} from "./appearance-settings";
 
 /**
  * One thread as a three-line card: project and status, title, then branch and
@@ -34,6 +38,7 @@ export function ThreadCard({
   onResetProjectColor,
   isWorking,
   workingShimmer,
+  unreadTitleWeight,
   isActive,
   canPark,
   onNavigate,
@@ -52,6 +57,7 @@ export function ThreadCard({
   /** True while live work is running on the thread. */
   isWorking: boolean;
   workingShimmer: WorkingShimmerVariant;
+  unreadTitleWeight: UnreadTitleWeight;
   isActive: boolean;
   /** False while the thread is working or blocked on the user. */
   canPark: boolean;
@@ -160,7 +166,7 @@ export function ThreadCard({
               // card — makes a thread at rest read as disabled, and at rest is
               // what most of the list is most of the time.
               "pointer-events-none relative z-[1] mt-0.5 truncate text-sm text-foreground",
-              thread.isUnread && "font-bold",
+              thread.isUnread && unreadTitleWeightClass(unreadTitleWeight),
             )}
           >
             {threadDisplayTitle(thread)}

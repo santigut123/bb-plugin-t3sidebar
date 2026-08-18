@@ -102,6 +102,28 @@ export const LIFECYCLE_CHANNEL = "lifecycle";
 export const PROJECT_COLORS_CHANNEL = "project-colors";
 
 export const t3sidebarSettings = {
+  cardDividers: {
+    type: "boolean" as const,
+    label: "Card dividers",
+    description:
+      "Show a subtle line between thread cards in the inbox and parked shelves.",
+    default: true,
+  },
+  projectColorStripes: {
+    type: "boolean" as const,
+    label: "Project color stripes",
+    description:
+      "Tint each card with a project-colored left stripe and project name while viewing all projects.",
+    default: true,
+  },
+  unreadTitleWeight: {
+    type: "select" as const,
+    label: "Unread title weight",
+    description:
+      "How strongly unread thread titles stand out from read ones.",
+    options: ["normal", "medium", "semibold", "bold"],
+    default: "bold",
+  },
   workingShimmer: {
     type: "select" as const,
     label: "Working card shimmer",

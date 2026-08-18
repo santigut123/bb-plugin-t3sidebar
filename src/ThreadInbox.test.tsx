@@ -71,7 +71,12 @@ function testRpc(
 }
 
 function testSettings(
-  values: Record<string, string | boolean> = { workingShimmer: "glow" },
+  values: Record<string, string | boolean> = {
+    workingShimmer: "glow",
+    cardDividers: true,
+    projectColorStripes: true,
+    unreadTitleWeight: "bold",
+  },
 ) {
   return { values, isLoading: false };
 }
