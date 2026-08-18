@@ -12,6 +12,8 @@ import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
 import { threadDisplayTitle } from "./inbox";
 import { resolveSnoozePresets } from "./lifecycle";
 import type { ProjectAccent } from "./project-colors";
+import { WorkingShimmer } from "./WorkingShimmer";
+import type { WorkingShimmerVariant } from "./working-shimmer";
 
 /**
  * One thread as a three-line card: project and status, title, then branch and
@@ -30,6 +32,8 @@ export function ThreadCard({
   hasCustomProjectColor,
   onSetProjectColor,
   onResetProjectColor,
+  isWorking,
+  workingShimmer,
   isActive,
   canPark,
   onNavigate,
@@ -45,6 +49,9 @@ export function ThreadCard({
   hasCustomProjectColor: boolean;
   onSetProjectColor: (hue: number) => void;
   onResetProjectColor: () => void;
+  /** True while live work is running on the thread. */
+  isWorking: boolean;
+  workingShimmer: WorkingShimmerVariant;
   isActive: boolean;
   /** False while the thread is working or blocked on the user. */
   canPark: boolean;
@@ -72,13 +79,16 @@ export function ThreadCard({
       <li className="list-none">
         <div
           className={cn(
-            "group/card relative rounded-md py-2 pl-3 pr-2.5 transition-colors",
+            "group/card relative overflow-hidden rounded-md py-2 pl-3 pr-2.5 transition-colors",
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
             // A thread open in another pane gets a weaker tint than the active
             // row, so the two states stay distinguishable.
             !isActive && layout !== null && "bg-sidebar-accent/30",
           )}
         >
+          {isWorking && workingShimmer !== "off" ? (
+            <WorkingShimmer variant={workingShimmer} />
+          ) : null}
           {showProjectAccent ? (
             <span
               aria-hidden
@@ -102,7 +112,7 @@ export function ThreadCard({
             }}
             className="absolute inset-0 cursor-pointer rounded-md"
           />
-          <div className="pointer-events-none relative flex h-5 items-center gap-1.5">
+          <div className="pointer-events-none relative z-[1] flex h-5 items-center gap-1.5">
             <span
               className="min-w-0 flex-1 truncate text-2xs font-medium"
               style={
@@ -149,13 +159,13 @@ export function ThreadCard({
               // Weight alone carries unread. Fading the title — or the whole
               // card — makes a thread at rest read as disabled, and at rest is
               // what most of the list is most of the time.
-              "pointer-events-none relative mt-0.5 truncate text-sm text-foreground",
+              "pointer-events-none relative z-[1] mt-0.5 truncate text-sm text-foreground",
               thread.isUnread && "font-bold",
             )}
           >
             {threadDisplayTitle(thread)}
           </div>
-          <div className="pointer-events-none relative mt-0.5 flex h-4 items-center gap-1.5 text-2xs text-muted-foreground">
+          <div className="pointer-events-none relative z-[1] mt-0.5 flex h-4 items-center gap-1.5 text-2xs text-muted-foreground">
             {/* A thread without a worktree still runs somewhere, so the
                 machine takes the branch's place rather than leaving the line
                 blank. */}

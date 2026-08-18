@@ -1,0 +1,156 @@
+/* Sweep animations for actively working thread cards. Imported by app.tsx. */
+
+@keyframes t3-shimmer-beam {
+  0% {
+    transform: translateX(-130%);
+    opacity: 0;
+  }
+  14% {
+    opacity: 1;
+  }
+  86% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(130%);
+    opacity: 0;
+  }
+}
+
+@keyframes t3-shimmer-sweep {
+  from {
+    transform: translateX(-160%);
+  }
+  to {
+    transform: translateX(160%);
+  }
+}
+
+.t3-working-shimmer-layer {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Variant 1: a tight bright band — crisp center, soft shoulders. */
+.t3-working-shimmer-beam .t3-working-shimmer-layer {
+  width: 46%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(1 0 0 / 0.015) 18%,
+    oklch(1 0 0 / 0.06) 36%,
+    oklch(1 0 0 / 0.14) 50%,
+    oklch(1 0 0 / 0.06) 64%,
+    oklch(1 0 0 / 0.015) 82%,
+    transparent 100%
+  );
+  animation: t3-shimmer-beam 2.4s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+/* Variant 2: a wider, softer glow — ambient pulse across the card. */
+.t3-working-shimmer-glow .t3-working-shimmer-layer {
+  width: 92%;
+  filter: blur(12px);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(1 0 0 / 0.04) 18%,
+    oklch(1 0 0 / 0.09) 34%,
+    oklch(1 0 0 / 0.13) 50%,
+    oklch(1 0 0 / 0.09) 66%,
+    oklch(1 0 0 / 0.04) 82%,
+    transparent 100%
+  );
+  animation: t3-shimmer-sweep 3.2s ease-in-out infinite;
+}
+
+/* Variant 3: stacked hard-edge bands — a multi-stripe sheen sweep. */
+.t3-working-shimmer-sheen-track {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 165%;
+  pointer-events: none;
+  will-change: transform;
+  animation: t3-shimmer-sweep 2.8s linear infinite;
+}
+
+.t3-working-shimmer-sheen-band {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.t3-working-shimmer-sheen-band-a {
+  background: linear-gradient(
+    102deg,
+    transparent 0%,
+    transparent 43%,
+    oklch(1 0 0 / 0.24) 43%,
+    oklch(1 0 0 / 0.24) 46.5%,
+    transparent 46.5%,
+    transparent 100%
+  );
+}
+
+.t3-working-shimmer-sheen-band-b {
+  background: linear-gradient(
+    102deg,
+    transparent 0%,
+    transparent 51%,
+    oklch(1 0 0 / 0.11) 51%,
+    oklch(1 0 0 / 0.11) 53%,
+    transparent 53%,
+    transparent 58%,
+    oklch(1 0 0 / 0.07) 58%,
+    oklch(1 0 0 / 0.07) 59.5%,
+    transparent 59.5%,
+    transparent 100%
+  );
+}
+
+.t3-working-shimmer-sheen-band-c {
+  opacity: 0.5;
+  background: linear-gradient(
+    102deg,
+    transparent 0%,
+    transparent 26%,
+    color-mix(in oklab, var(--sidebar-accent) 75%, white 24%) 26%,
+    color-mix(in oklab, var(--sidebar-accent) 75%, white 24%) 30%,
+    transparent 30%,
+    transparent 63%,
+    color-mix(in oklab, var(--sidebar-accent) 50%, white 14%) 63%,
+    color-mix(in oklab, var(--sidebar-accent) 50%, white 14%) 67%,
+    transparent 67%,
+    transparent 100%
+  );
+}
+
+.t3-working-shimmer-sheen-band-d {
+  background: linear-gradient(
+    102deg,
+    transparent 0%,
+    transparent 34%,
+    oklch(1 0 0 / 0.06) 34%,
+    oklch(1 0 0 / 0.06) 38%,
+    transparent 38%,
+    transparent 72%,
+    oklch(1 0 0 / 0.04) 72%,
+    oklch(1 0 0 / 0.04) 75%,
+    transparent 75%,
+    transparent 100%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t3-working-shimmer-beam .t3-working-shimmer-layer,
+  .t3-working-shimmer-glow .t3-working-shimmer-layer,
+  .t3-working-shimmer-sheen-track {
+    animation: none;
+    transform: none;
+    opacity: 0.35;
+  }
+}

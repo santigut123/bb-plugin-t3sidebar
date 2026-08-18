@@ -70,6 +70,12 @@ function testRpc(
   };
 }
 
+function testSettings(
+  values: Record<string, string | boolean> = { workingShimmer: "glow" },
+) {
+  return { values, isLoading: false };
+}
+
 function render(
   threads: PluginSidebarThread[],
   projects = [{ id: "proj_1", name: "bb", isPersonal: false }],
@@ -79,6 +85,7 @@ function render(
     // The lifecycle store is the plugin's own backend; an empty one means
     // every thread is active, which is what these list tests are about.
     rpc: testRpc(),
+    settings: testSettings(),
   });
 }
 
@@ -126,6 +133,7 @@ describe("ThreadInbox", () => {
           projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
         },
         rpc: testRpc(),
+        settings: testSettings(),
       },
     );
     fireEvent.click(screen.getByRole("link"));
@@ -172,6 +180,7 @@ describe("ThreadInbox", () => {
           projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
         },
         rpc: testRpc(),
+        settings: testSettings(),
       },
     );
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
@@ -238,6 +247,7 @@ describe("parking threads", () => {
           ],
         }),
       }),
+      settings: testSettings(),
     });
     // The shelf renders once the lifecycle read resolves.
     const shelf = await screen.findByRole("region", { name: "Settled" });
@@ -281,6 +291,7 @@ describe("parking threads", () => {
           ],
         }),
       }),
+      settings: testSettings(),
     });
     expect(await screen.findByText("Still running")).toBeDefined();
     expect(screen.queryByRole("region", { name: "Settled" })).toBeNull();
@@ -309,6 +320,7 @@ describe("parking threads", () => {
           return { ok: true };
         },
       }),
+      settings: testSettings(),
     });
     fireEvent.click(await screen.findByLabelText("Settle thread"));
     await waitFor(() => expect(settled).toBe("thr_park"));
@@ -334,6 +346,7 @@ describe("parking threads", () => {
           ],
         }),
       }),
+      settings: testSettings(),
     });
     const shelf = await screen.findByRole("region", { name: "Snoozed" });
     fireEvent.click(within(shelf).getByRole("button"));
@@ -506,6 +519,7 @@ describe("pull request badge", () => {
         projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
       },
       rpc: testRpc(),
+      settings: testSettings(),
       sidebarPullRequests: {
         thr_pr: {
           number: 412,

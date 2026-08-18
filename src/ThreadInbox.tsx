@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
+  useSettings,
   type PluginSidebarThread,
   type PluginThreadListProps,
 } from "@get-bb/plugin-sdk/app";
@@ -16,8 +17,12 @@ import {
 } from "./components/Select";
 import { ThreadCard } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
-import { useLifecycle } from "./useLifecycle";
+import { useLifecycle, isWorking } from "./useLifecycle";
 import { useProjectColors } from "./useProjectColors";
+import {
+  parseWorkingShimmerVariant,
+  WORKING_SHIMMER_SETTING_KEY,
+} from "./working-shimmer";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import {
   filterByProject,
@@ -46,6 +51,10 @@ export function ThreadInbox({
   const actions = useSidebarThreadActions();
   const lifecycle = useLifecycle(threads);
   const projectColors = useProjectColors();
+  const { values: settingsValues } = useSettings();
+  const workingShimmer = parseWorkingShimmerVariant(
+    settingsValues?.[WORKING_SHIMMER_SETTING_KEY],
+  );
   const [scope, setScope] = useState<string>(ALL_PROJECTS);
   // One clock for every card in a render, quantized to the minute so the
   // labels do not disagree and do not churn on unrelated re-renders.
@@ -116,6 +125,8 @@ export function ThreadInbox({
     onSetProjectColor: (hue: number) =>
       projectColors.setColor(thread.projectId, hue),
     onResetProjectColor: () => projectColors.resetColor(thread.projectId),
+    isWorking: isWorking(thread),
+    workingShimmer,
     isActive: thread.id === activeThreadId,
     canPark: lifecycle.canPark(thread),
     onNavigate,

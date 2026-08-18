@@ -101,7 +101,19 @@ export const t3sidebarRpcContract = defineRpcContract({
 export const LIFECYCLE_CHANNEL = "lifecycle";
 export const PROJECT_COLORS_CHANNEL = "project-colors";
 
+export const t3sidebarSettings = {
+  workingShimmer: {
+    type: "select" as const,
+    label: "Working card shimmer",
+    description:
+      "Animation on inbox cards while a thread is actively working. Beam is a tight highlight; Glow is softer and wider; Sheen stacks hard-edge highlight bands.",
+    options: ["off", "beam", "glow", "sheen"],
+    default: "glow",
+  },
+};
+
 export default function plugin(bb: BbPluginApi) {
+  bb.settings.define(t3sidebarSettings);
   const db = bb.storage.database();
   bb.storage.migrate(db, migrations);
 
