@@ -3,11 +3,11 @@
 An inbox-style replacement for bb's sidebar thread list, and the reference
 example for `app.slots.experimental_threadList`.
 
-This fork adds colored status indicators, including a distinct monitoring
-state. Install it from GitHub:
+This plugin started as an example in the BB repository. Install its public
+release from GitHub:
 
 ```sh
-bb plugin install git:https://github.com/santigut123/bb-plugin-t3sidebar.git@v0.2.0
+bb plugin install git:https://github.com/SawyerHood/bb-plugin-t3sidebar.git@^0.1.0
 ```
 
 Turn it on in **Settings → Appearance → Sidebar**. bb's own list stays the
