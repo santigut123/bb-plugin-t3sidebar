@@ -11,7 +11,7 @@
   "homepage": "https://github.com/SawyerHood/bb-plugin-t3sidebar#readme",
   "engines": {
     "bb": ">=0.37.0",
-    "bbPluginSdk": ">=0.4.3"
+    "bbPluginSdk": ">=0.4.8"
   },
   "bb": {
     "name": "T3 Sidebar",
@@ -38,7 +38,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@get-bb/plugin-sdk": "0.4.4",
+    "@get-bb/plugin-sdk": "0.4.8",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
@@ -51,6 +51,8 @@
     "@types/better-sqlite3": "^7.6.12",
     "better-sqlite3": "12.10.0",
     "@radix-ui/react-context-menu": "^2.3.3",
-    "@radix-ui/react-select": "^2.3.3"
+    "@radix-ui/react-select": "^2.3.3",
+    "cron-parser": "^5.10.0",
+    "hono": "^4.13.3"
   }
 }

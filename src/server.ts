@@ -49,6 +49,19 @@ const projectIdSchema = z.object({ projectId: z.string().trim().min(1) });
 const hueSchema = z.number().int().min(0).max(359);
 
 export const t3sidebarRpcContract = defineRpcContract({
+  listTurnStarts: {
+    input: z.object({
+      threadIds: z.array(z.string().trim().min(1)).min(1).max(100),
+    }),
+    output: z.object({
+      rows: z.array(
+        z.object({
+          threadId: z.string(),
+          startedAt: z.number().nullable(),
+        }),
+      ),
+    }),
+  },
   listLifecycle: {
     input: z.object({}),
     output: z.object({
@@ -196,6 +209,20 @@ export default function plugin(bb: BbPluginApi) {
   };
 
   bb.rpc.register(t3sidebarRpcContract, {
+    async listTurnStarts({ threadIds }) {
+      const rows = await Promise.all(
+        [...new Set(threadIds)].map(async (threadId) => {
+          const [latest] = await bb.sdk.threads.events.list({
+            threadId,
+            types: ["turn/started"],
+            order: "desc",
+            limit: "1",
+          });
+          return { threadId, startedAt: latest?.createdAt ?? null };
+        }),
+      );
+      return { rows };
+    },
     async listLifecycle() {
       return { rows: readAll() };
     },
