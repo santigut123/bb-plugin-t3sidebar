@@ -1,16 +1,21 @@
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import { StatusGlyph, hasStatusGlyph } from "./StatusGlyph";
+import {
+  StatusGlyph,
+  hasStatusGlyph,
+  statusPresentation,
+} from "./StatusGlyph";
+import { cn } from "./lib/utils";
 import { relativeTimeLabel } from "./relative-time";
 
 /**
- * The row's trailing slot: one fixed width, right-aligned, on every row.
+ * The row's trailing slot: right-aligned with a fixed minimum width.
  *
- * Fixed rather than intrinsic because the age label's width follows its text —
- * "now" is wider than "7m" — and an intrinsic slot drags whatever sits beside
- * it back and forth, so no two rows agree on a column. The width holds the
- * widest label this sidebar can produce ("now", "59m", "52w").
+ * Idle ages keep the original aligned column. A live status can grow beyond
+ * it to show a compact label; the project/title area is the flexible region
+ * and truncates before this status does.
  */
-export const STATUS_SLOT_CLASS = "flex w-7 shrink-0 items-center justify-end";
+export const STATUS_SLOT_CLASS =
+  "flex min-w-7 shrink-0 items-center justify-end";
 
 /**
  * The box every trailing glyph sits in, whatever its artwork measures.
@@ -36,8 +41,27 @@ export function StatusOrTime({
   now: number;
 }) {
   if (hasStatusGlyph(thread.indicator)) {
+    const presentation = statusPresentation(
+      thread.indicator,
+      thread.indicatorLabel,
+    );
+    if (presentation === null) return null;
+
     return (
-      <StatusGlyph indicator={thread.indicator} label={thread.indicatorLabel} />
+      <span
+        className={cn(
+          "flex items-center gap-1 whitespace-nowrap text-2xs font-medium",
+          presentation.toneClass,
+        )}
+      >
+        <StatusGlyph
+          indicator={thread.indicator}
+          label={thread.indicatorLabel}
+        />
+        {/* The glyph keeps bb's richer accessible label; this is its compact
+            visual shorthand, so exposing both would announce it twice. */}
+        <span aria-hidden="true">{presentation.shortLabel}</span>
+      </span>
     );
   }
   return (

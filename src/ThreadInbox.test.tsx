@@ -448,14 +448,21 @@ describe("attention states", () => {
     [
       "waiting-for-input",
       "Thread needs user input",
+      "Input needed",
       "CircleQuestion",
       "text-warning-text",
     ],
-    ["unread-error", "Unread thread failed", "CircleX", "text-destructive-text"],
+    [
+      "unread-error",
+      "Unread thread failed",
+      "Error",
+      "CircleX",
+      "text-destructive-text",
+    ],
   ] as const;
 
-  for (const [indicator, label, icon, color] of iconStates) {
-    it(`shows a colored ${indicator} glyph instead of the age`, async () => {
+  for (const [indicator, label, visibleLabel, icon, color] of iconStates) {
+    it(`shows a labeled, colored ${indicator} glyph instead of the age`, async () => {
       render([
         thread({
           id: `thr_${indicator}`,
@@ -467,6 +474,7 @@ describe("attention states", () => {
       const glyph = await screen.findByLabelText(label);
       expect(glyph.getAttribute("data-icon")).toBe(icon);
       expect(glyph.getAttribute("class")).toContain(color);
+      expect(screen.getByText(visibleLabel)).toBeDefined();
       expect(screen.queryByText("3h")).toBeNull();
     });
   }
@@ -481,6 +489,7 @@ describe("attention states", () => {
     ]);
     const glyph = await screen.findByLabelText("Unread thread succeeded");
     expect(glyph.querySelector(".bg-success")).not.toBeNull();
+    expect(screen.getByText("Success")).toBeDefined();
   });
 
   // Running work is still identified by shape and motion, so color is an
@@ -498,6 +507,7 @@ describe("attention states", () => {
     expect(glyph.getAttribute("data-icon")).toBe("Loading");
     expect(glyph.getAttribute("class")).toContain("text-primary");
     expect(glyph.getAttribute("class")).toContain("animate-spin");
+    expect(screen.getByText("Working")).toBeDefined();
     expect(screen.queryByLabelText("Unread thread succeeded")).toBeNull();
   });
 
@@ -514,34 +524,63 @@ describe("attention states", () => {
     expect(glyph.getAttribute("class")).toContain("text-timeline-accent");
     expect(glyph.getAttribute("class")).toContain("animate-pulse");
     expect(glyph.getAttribute("class")).not.toContain("animate-spin");
+    expect(screen.getByText("Monitoring")).toBeDefined();
   });
 
   const activeStates = [
-    ["workflow", "Workflow running", "Workflow", "text-primary"],
+    [
+      "workflow",
+      "Workflow running",
+      "Workflow",
+      "Workflow",
+      "text-primary",
+    ],
     [
       "background-agent",
       "Background agent running",
+      "Agent",
       "UserRoundPlus",
       "text-timeline-accent",
     ],
     [
       "background-command",
       "Background command running",
+      "Command",
       "Terminal",
       "text-timeline-accent",
     ],
-    ["plan-mode", "Plan mode active", "ListTodo", "text-warning-text"],
-    ["goal", "Goal active", "Target", "text-success"],
+    [
+      "plan-mode",
+      "Plan mode active",
+      "Planning",
+      "ListTodo",
+      "text-warning-text",
+    ],
+    ["goal", "Goal active", "Goal", "Target", "text-success"],
   ] as const;
 
-  for (const [indicator, label, icon, color] of activeStates) {
-    it(`colors the ${indicator} activity glyph`, async () => {
-      render([thread({ id: `thr_${indicator}`, indicator, indicatorLabel: label })]);
+  for (const [indicator, label, visibleLabel, icon, color] of activeStates) {
+    it(`labels and colors the ${indicator} activity glyph`, async () => {
+      render([
+        thread({ id: `thr_${indicator}`, indicator, indicatorLabel: label }),
+      ]);
       const glyph = await screen.findByLabelText(label);
       expect(glyph.getAttribute("data-icon")).toBe(icon);
       expect(glyph.getAttribute("class")).toContain(color);
+      expect(screen.getByText(visibleLabel)).toBeDefined();
     });
   }
+
+  it("labels draft work", async () => {
+    render([
+      thread({
+        id: "thr_draft",
+        indicator: "working-draft",
+        indicatorLabel: "Thread has a working draft",
+      }),
+    ]);
+    expect(await screen.findByText("Draft")).toBeDefined();
+  });
 });
 
 describe("pull request badge", () => {

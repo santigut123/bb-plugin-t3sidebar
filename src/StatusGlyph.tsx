@@ -27,21 +27,46 @@ import { cn } from "./lib/utils";
 export function hasStatusGlyph(
   indicator: PluginSidebarThreadIndicator,
 ): boolean {
+  return statusPresentation(indicator, null) !== null;
+}
+
+export interface StatusPresentation {
+  shortLabel: string;
+  toneClass: string;
+}
+
+/** Compact visible wording and its matching host-theme color. */
+export function statusPresentation(
+  indicator: PluginSidebarThreadIndicator,
+  label: string | null,
+): StatusPresentation | null {
   switch (indicator) {
     case "unread-error":
+      return { shortLabel: "Error", toneClass: "text-destructive-text" };
     case "waiting-for-input":
+      return { shortLabel: "Input needed", toneClass: "text-warning-text" };
     case "unread-success":
+      return { shortLabel: "Success", toneClass: "text-success" };
     case "runtime":
+      return isMonitoring(label)
+        ? { shortLabel: "Monitoring", toneClass: "text-timeline-accent" }
+        : { shortLabel: "Working", toneClass: "text-primary" };
     case "workflow":
+      return { shortLabel: "Workflow", toneClass: "text-primary" };
     case "background-agent":
+      return { shortLabel: "Agent", toneClass: "text-timeline-accent" };
     case "background-command":
+      return { shortLabel: "Command", toneClass: "text-timeline-accent" };
     case "plan-mode":
+      return { shortLabel: "Planning", toneClass: "text-warning-text" };
     case "goal":
+      return { shortLabel: "Goal", toneClass: "text-success" };
     case "draft":
     case "working-draft":
-      return true;
+      return { shortLabel: "Draft", toneClass: "text-muted-foreground" };
+    case "none":
     default:
-      return false;
+      return null;
   }
 }
 
@@ -56,6 +81,9 @@ export function StatusGlyph({
 }) {
   const shared = cn("size-3.5 shrink-0", className);
   const aria = label ?? undefined;
+  const tone =
+    statusPresentation(indicator, label)?.toneClass ??
+    "text-muted-foreground";
 
   switch (indicator) {
     case "unread-error":
@@ -63,7 +91,7 @@ export function StatusGlyph({
         <Icon
           name="CircleX"
           aria-label={aria}
-          className={cn(shared, "text-destructive-text")}
+          className={cn(shared, tone)}
         />
       );
     case "waiting-for-input":
@@ -71,7 +99,7 @@ export function StatusGlyph({
         <Icon
           name="CircleQuestion"
           aria-label={aria}
-          className={cn(shared, "text-warning-text")}
+          className={cn(shared, tone)}
         />
       );
     case "runtime":
@@ -82,7 +110,8 @@ export function StatusGlyph({
             aria-label={aria}
             className={cn(
               shared,
-              "text-timeline-accent motion-safe:animate-pulse",
+              tone,
+              "motion-safe:animate-pulse",
             )}
           />
         );
@@ -91,7 +120,7 @@ export function StatusGlyph({
         <Icon
           name="Loading"
           aria-label={aria}
-          className={cn(shared, "animate-spin text-primary")}
+          className={cn(shared, "animate-spin", tone)}
         />
       );
     case "workflow":
@@ -99,7 +128,7 @@ export function StatusGlyph({
         <ShineIcon
           name="Workflow"
           label={aria}
-          color="text-primary"
+          color={tone}
           className={shared}
         />
       );
@@ -108,7 +137,7 @@ export function StatusGlyph({
         <ShineIcon
           name="UserRoundPlus"
           label={aria}
-          color="text-timeline-accent"
+          color={tone}
           className={shared}
         />
       );
@@ -117,7 +146,7 @@ export function StatusGlyph({
         <ShineIcon
           name="Terminal"
           label={aria}
-          color="text-timeline-accent"
+          color={tone}
           className={shared}
         />
       );
@@ -126,7 +155,7 @@ export function StatusGlyph({
         <ShineIcon
           name="ListTodo"
           label={aria}
-          color="text-warning-text"
+          color={tone}
           className={shared}
         />
       );
@@ -135,7 +164,7 @@ export function StatusGlyph({
         <ShineIcon
           name="Target"
           label={aria}
-          color="text-success"
+          color={tone}
           className={shared}
         />
       );
@@ -145,7 +174,7 @@ export function StatusGlyph({
         <Icon
           name="Edit"
           aria-label={aria}
-          className={cn(shared, "text-muted-foreground")}
+          className={cn(shared, tone)}
         />
       );
     case "unread-success":
