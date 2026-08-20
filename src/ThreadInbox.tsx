@@ -32,6 +32,8 @@ import {
   UNREAD_TITLE_WEIGHT_SETTING_KEY,
 } from "./appearance-settings";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
+import { statusPresentation } from "./StatusGlyph";
+import { useTurnStarts } from "./useTurnStarts";
 import {
   filterByProject,
   hideChildrenOfVisibleParents,
@@ -133,6 +135,20 @@ export function ThreadInbox({
     };
   }, [lifecycle, scope, searchQuery, threads]);
 
+  const timedThreadIds = useMemo(
+    () =>
+      [...pinned, ...inbox]
+        .filter(
+          (thread) =>
+            statusPresentation(thread.indicator, thread.indicatorLabel)
+              ?.shortLabel === "Working",
+        )
+        .map((thread) => thread.id)
+        .slice(0, 100),
+    [inbox, pinned],
+  );
+  const turnStarts = useTurnStarts(timedThreadIds);
+
   const scopeLabel =
     scope === ALL_PROJECTS
       ? "All projects"
@@ -152,6 +168,7 @@ export function ThreadInbox({
     isWorking: isWorking(thread),
     workingShimmer,
     animateStatusIcons,
+    turnStartedAt: turnStarts.get(thread.id) ?? null,
     unreadTitleWeight,
     isActive: thread.id === activeThreadId,
     canPark: lifecycle.canPark(thread),

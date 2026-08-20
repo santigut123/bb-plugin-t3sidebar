@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import {
   StatusGlyph,
@@ -6,6 +7,7 @@ import {
 } from "./StatusGlyph";
 import { cn } from "./lib/utils";
 import { relativeTimeLabel } from "./relative-time";
+import { formatWorkingDurationLabel } from "./working-duration";
 
 /**
  * The row's trailing slot: right-aligned with a fixed minimum width.
@@ -36,17 +38,20 @@ export function StatusOrTime({
   thread,
   now,
   animateStatusIcons = false,
+  turnStartedAt = null,
 }: {
   thread: PluginSidebarThread;
   /** Quantized clock, shared by every row in one render. */
   now: number;
   animateStatusIcons?: boolean;
+  turnStartedAt?: number | null;
 }) {
   if (hasStatusPresentation(thread.indicator)) {
     return (
       <StatusLabel
         thread={thread}
         animateStatusIcons={animateStatusIcons}
+        turnStartedAt={turnStartedAt}
       />
     );
   }
@@ -60,10 +65,12 @@ export function StatusOrTime({
 export function StatusLabel({
   thread,
   animateStatusIcons = false,
+  turnStartedAt = null,
   className,
 }: {
   thread: PluginSidebarThread;
   animateStatusIcons?: boolean;
+  turnStartedAt?: number | null;
   className?: string;
 }) {
   const presentation = statusPresentation(
@@ -92,6 +99,26 @@ export function StatusLabel({
           its compact visual shorthand, so exposing both would announce it
           twice. */}
       <span aria-hidden="true">{presentation.shortLabel}</span>
+      {presentation.shortLabel === "Working" ? (
+        <WorkingDuration startedAt={turnStartedAt} />
+      ) : null}
+    </span>
+  );
+}
+
+/** Self-ticking so only the duration span re-renders each second. */
+function WorkingDuration({ startedAt }: { startedAt: number | null }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (startedAt === null) return;
+    const timer = window.setInterval(() => setTick((tick) => tick + 1), 1_000);
+    return () => window.clearInterval(timer);
+  }, [startedAt]);
+
+  if (startedAt === null) return null;
+  return (
+    <span aria-hidden="true" className="font-mono tabular-nums">
+      {formatWorkingDurationLabel(Date.now() - startedAt)}
     </span>
   );
 }

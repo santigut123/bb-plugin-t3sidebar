@@ -39,6 +39,7 @@ export function ThreadCard({
   isWorking,
   workingShimmer,
   animateStatusIcons,
+  turnStartedAt,
   unreadTitleWeight,
   isActive,
   canPark,
@@ -59,6 +60,8 @@ export function ThreadCard({
   isWorking: boolean;
   workingShimmer: WorkingShimmerVariant;
   animateStatusIcons: boolean;
+  /** Latest active turn start, used only by the self-ticking Working label. */
+  turnStartedAt: number | null;
   unreadTitleWeight: UnreadTitleWeight;
   isActive: boolean;
   /** False while the thread is working or blocked on the user. */
@@ -166,6 +169,7 @@ export function ThreadCard({
                 thread={thread}
                 now={now}
                 animateStatusIcons={animateStatusIcons}
+                turnStartedAt={turnStartedAt}
               />
             </span>
           </div>

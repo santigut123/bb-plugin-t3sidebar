@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   screen,
@@ -55,6 +56,7 @@ function thread(
 const listProps = {
   activeThreadId: null,
   activeProjectId: null,
+  experimental_Original: () => null,
   isCompactViewport: false,
   onNavigate: () => {},
   searchQuery: "",
@@ -66,6 +68,7 @@ function testRpc(
   return {
     listLifecycle: () => ({ rows: [] }),
     listProjectColors: () => ({ rows: [] }),
+    listTurnStarts: () => ({ rows: [] }),
     ...overrides,
   };
 }
@@ -95,7 +98,10 @@ function render(
   });
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("t3sidebar registration", () => {
   it("registers exactly one thread list", () => {
@@ -548,6 +554,39 @@ describe("attention states", () => {
     expect(status.getAttribute("class")).not.toContain("text-2xs");
     expect(screen.getByText("Working")).toBeDefined();
     expect(screen.queryByLabelText("Unread thread succeeded")).toBeNull();
+  });
+
+  it("ticks the working duration from the backend turn start", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(40_000);
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "thr_busy",
+            indicator: "runtime",
+            indicatorLabel: "Thread working",
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listTurnStarts: () => ({
+          rows: [{ threadId: "thr_busy", startedAt: 5_000 }],
+        }),
+      }),
+      settings: testSettings(),
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const status = screen.getByRole("status", { name: "Thread working" });
+    expect(status.textContent).toBe("Working35s");
+
+    act(() => vi.advanceTimersByTime(2_000));
+    expect(status.textContent).toBe("Working37s");
   });
 
   it("shows monitoring as quiet timeline-colored text", async () => {
