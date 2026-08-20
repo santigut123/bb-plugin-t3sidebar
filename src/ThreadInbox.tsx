@@ -230,6 +230,8 @@ export function ThreadInbox({
               showCardDividers={showCardDividers}
               activeThreadId={activeThreadId}
               lifecycle={lifecycle}
+              projectNameById={projectNameById}
+              projectColors={projectColors}
               onNavigate={onNavigate}
             />
             <ParkedShelf
@@ -241,6 +243,8 @@ export function ThreadInbox({
               showCardDividers={showCardDividers}
               activeThreadId={activeThreadId}
               lifecycle={lifecycle}
+              projectNameById={projectNameById}
+              projectColors={projectColors}
               onNavigate={onNavigate}
             />
           </>
@@ -264,6 +268,8 @@ function ParkedShelf({
   showCardDividers,
   activeThreadId,
   lifecycle,
+  projectNameById,
+  projectColors,
   onNavigate,
 }: {
   label: string;
@@ -274,6 +280,8 @@ function ParkedShelf({
   showCardDividers: boolean;
   activeThreadId: string | null;
   lifecycle: ReturnType<typeof useLifecycle>;
+  projectNameById: ReadonlyMap<string, string>;
+  projectColors: ReturnType<typeof useProjectColors>;
   onNavigate: () => void;
 }) {
   if (threads.length === 0) return null;
@@ -313,6 +321,17 @@ function ParkedShelf({
             <SlimRow
               key={thread.id}
               thread={thread}
+              projectName={projectNameById.get(thread.projectId) ?? null}
+              projectHue={projectColors.accentFor(thread.projectId).hue}
+              hasCustomProjectColor={projectColors.hasCustomColor(
+                thread.projectId,
+              )}
+              onSetProjectColor={(hue) =>
+                projectColors.setColor(thread.projectId, hue)
+              }
+              onResetProjectColor={() =>
+                projectColors.resetColor(thread.projectId)
+              }
               isActive={thread.id === activeThreadId}
               shelf={shelf}
               wakeAt={lifecycle.wakeAtFor(thread)}

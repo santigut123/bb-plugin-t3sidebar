@@ -78,7 +78,7 @@ function testSettings(
     unreadTitleWeight: "bold",
   },
 ) {
-  return { values, isLoading: false };
+  return values;
 }
 
 function render(
