@@ -444,14 +444,18 @@ describe("card metadata", () => {
 // they use bb's own glyphs: the two lists sit in one window, and a user who
 // switches between them should not have to learn a second vocabulary.
 describe("attention states", () => {
-  const states = [
-    ["waiting-for-input", "Thread needs user input"],
-    ["unread-error", "Unread thread failed"],
-    ["unread-success", "Unread thread succeeded"],
+  const iconStates = [
+    [
+      "waiting-for-input",
+      "Thread needs user input",
+      "CircleQuestion",
+      "text-warning-text",
+    ],
+    ["unread-error", "Unread thread failed", "CircleX", "text-destructive-text"],
   ] as const;
 
-  for (const [indicator, label] of states) {
-    it(`shows the ${indicator} glyph instead of the age`, async () => {
+  for (const [indicator, label, icon, color] of iconStates) {
+    it(`shows a colored ${indicator} glyph instead of the age`, async () => {
       render([
         thread({
           id: `thr_${indicator}`,
@@ -460,14 +464,28 @@ describe("attention states", () => {
           updatedAt: Date.now() - (3 * 3_600_000 + 60_000),
         }),
       ]);
-      expect(await screen.findByLabelText(label)).toBeDefined();
+      const glyph = await screen.findByLabelText(label);
+      expect(glyph.getAttribute("data-icon")).toBe(icon);
+      expect(glyph.getAttribute("class")).toContain(color);
       expect(screen.queryByText("3h")).toBeNull();
     });
   }
 
-  // Running work is the one state the user does NOT have to act on, so it gets
-  // the neutral spinner and no notification dot.
-  it("shows the spinner, not a dot, while work runs", async () => {
+  it("uses a success-colored dot for an unread success", async () => {
+    render([
+      thread({
+        id: "thr_success",
+        indicator: "unread-success",
+        indicatorLabel: "Unread thread succeeded",
+      }),
+    ]);
+    const glyph = await screen.findByLabelText("Unread thread succeeded");
+    expect(glyph.querySelector(".bg-success")).not.toBeNull();
+  });
+
+  // Running work is still identified by shape and motion, so color is an
+  // additional signal rather than the only way to read the state.
+  it("shows a primary-colored spinner while work runs", async () => {
     render([
       thread({
         id: "thr_busy",
@@ -476,9 +494,54 @@ describe("attention states", () => {
         indicatorLabel: "Thread working",
       }),
     ]);
-    expect(await screen.findByLabelText("Thread working")).toBeDefined();
+    const glyph = await screen.findByLabelText("Thread working");
+    expect(glyph.getAttribute("data-icon")).toBe("Loading");
+    expect(glyph.getAttribute("class")).toContain("text-primary");
+    expect(glyph.getAttribute("class")).toContain("animate-spin");
     expect(screen.queryByLabelText("Unread thread succeeded")).toBeNull();
   });
+
+  it("shows a pulsing timeline-colored radar while monitoring", async () => {
+    render([
+      thread({
+        id: "thr_monitoring",
+        indicator: "runtime",
+        indicatorLabel: "Monitoring repository",
+      }),
+    ]);
+    const glyph = await screen.findByLabelText("Monitoring repository");
+    expect(glyph.getAttribute("data-icon")).toBe("Radar");
+    expect(glyph.getAttribute("class")).toContain("text-timeline-accent");
+    expect(glyph.getAttribute("class")).toContain("animate-pulse");
+    expect(glyph.getAttribute("class")).not.toContain("animate-spin");
+  });
+
+  const activeStates = [
+    ["workflow", "Workflow running", "Workflow", "text-primary"],
+    [
+      "background-agent",
+      "Background agent running",
+      "UserRoundPlus",
+      "text-timeline-accent",
+    ],
+    [
+      "background-command",
+      "Background command running",
+      "Terminal",
+      "text-timeline-accent",
+    ],
+    ["plan-mode", "Plan mode active", "ListTodo", "text-warning-text"],
+    ["goal", "Goal active", "Target", "text-success"],
+  ] as const;
+
+  for (const [indicator, label, icon, color] of activeStates) {
+    it(`colors the ${indicator} activity glyph`, async () => {
+      render([thread({ id: `thr_${indicator}`, indicator, indicatorLabel: label })]);
+      const glyph = await screen.findByLabelText(label);
+      expect(glyph.getAttribute("data-icon")).toBe(icon);
+      expect(glyph.getAttribute("class")).toContain(color);
+    });
+  }
 });
 
 describe("pull request badge", () => {

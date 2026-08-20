@@ -3,14 +3,14 @@ import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
 
 /**
- * This plugin's status glyphs, matching bb's own sidebar shape for shape: the
- * red circle-x for a failure, the circle-question for a raised hand, the
- * spinner for live work, and a dot for a finished thread you have not read.
+ * This plugin's status glyphs use bb's own sidebar shapes and semantic theme
+ * colors. Shape, motion, and the host-provided accessible label carry the
+ * meaning; color reinforces it without becoming the only signal.
  *
  * The SDK ships `indicator` as data and no status component on purpose, so a
- * replaced sidebar can choose its own look. This one deliberately does not:
- * the two lists sit in the same window, and a user who switches between them
- * should not have to learn a second vocabulary.
+ * replaced sidebar can choose its own look. Monitoring currently arrives as a
+ * runtime indicator whose label contains "monitoring", so it gets a distinct
+ * radar until the SDK exposes a dedicated indicator kind.
  *
  * An unrecognized indicator draws nothing: bb adds kinds over time, and a
  * plugin built today must not break on a kind shipped tomorrow.
@@ -63,7 +63,7 @@ export function StatusGlyph({
         <Icon
           name="CircleX"
           aria-label={aria}
-          className={cn(shared, "text-destructive")}
+          className={cn(shared, "text-destructive-text")}
         />
       );
     case "waiting-for-input":
@@ -71,27 +71,74 @@ export function StatusGlyph({
         <Icon
           name="CircleQuestion"
           aria-label={aria}
-          className={cn(shared, "text-muted-foreground/75")}
+          className={cn(shared, "text-warning-text")}
         />
       );
     case "runtime":
+      if (isMonitoring(label)) {
+        return (
+          <Icon
+            name="Radar"
+            aria-label={aria}
+            className={cn(
+              shared,
+              "text-timeline-accent motion-safe:animate-pulse",
+            )}
+          />
+        );
+      }
       return (
         <Icon
           name="Loading"
           aria-label={aria}
-          className={cn(shared, "animate-spin text-muted-foreground/50")}
+          className={cn(shared, "animate-spin text-primary")}
         />
       );
     case "workflow":
-      return <ShineIcon name="Workflow" label={aria} className={shared} />;
+      return (
+        <ShineIcon
+          name="Workflow"
+          label={aria}
+          color="text-primary"
+          className={shared}
+        />
+      );
     case "background-agent":
-      return <ShineIcon name="UserRoundPlus" label={aria} className={shared} />;
+      return (
+        <ShineIcon
+          name="UserRoundPlus"
+          label={aria}
+          color="text-timeline-accent"
+          className={shared}
+        />
+      );
     case "background-command":
-      return <ShineIcon name="Terminal" label={aria} className={shared} />;
+      return (
+        <ShineIcon
+          name="Terminal"
+          label={aria}
+          color="text-timeline-accent"
+          className={shared}
+        />
+      );
     case "plan-mode":
-      return <ShineIcon name="ListTodo" label={aria} className={shared} />;
+      return (
+        <ShineIcon
+          name="ListTodo"
+          label={aria}
+          color="text-warning-text"
+          className={shared}
+        />
+      );
     case "goal":
-      return <ShineIcon name="Target" label={aria} className={shared} />;
+      return (
+        <ShineIcon
+          name="Target"
+          label={aria}
+          color="text-success"
+          className={shared}
+        />
+      );
     case "draft":
     case "working-draft":
       return (
@@ -110,7 +157,7 @@ export function StatusGlyph({
           aria-label={aria}
           className={cn("flex items-center justify-center", shared)}
         >
-          <span className="size-[5px] rounded-full bg-timeline-accent" />
+          <span className="size-[5px] rounded-full bg-success" />
         </span>
       );
     case "none":
@@ -120,20 +167,26 @@ export function StatusGlyph({
   }
 }
 
+function isMonitoring(label: string | null): boolean {
+  return label !== null && /\bmonitor(?:ed|ing|s)?\b/i.test(label);
+}
+
 function ShineIcon({
   name,
   label,
+  color,
   className,
 }: {
   name: "Workflow" | "UserRoundPlus" | "Terminal" | "ListTodo" | "Target";
   label: string | undefined;
+  color: string;
   className: string;
 }) {
   return (
     <Icon
       name={name}
       aria-label={label}
-      className={cn("animate-shine-icon text-muted-foreground/50", className)}
+      className={cn("animate-shine-icon", color, className)}
     />
   );
 }
