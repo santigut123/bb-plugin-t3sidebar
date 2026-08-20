@@ -38,6 +38,7 @@ export function ThreadCard({
   onResetProjectColor,
   isWorking,
   workingShimmer,
+  animateStatusIcons,
   unreadTitleWeight,
   isActive,
   canPark,
@@ -57,6 +58,7 @@ export function ThreadCard({
   /** True while live work is running on the thread. */
   isWorking: boolean;
   workingShimmer: WorkingShimmerVariant;
+  animateStatusIcons: boolean;
   unreadTitleWeight: UnreadTitleWeight;
   isActive: boolean;
   /** False while the thread is working or blocked on the user. */
@@ -85,8 +87,11 @@ export function ThreadCard({
       <li className="list-none">
         <div
           className={cn(
-            "group/card relative overflow-hidden rounded-md py-2 pl-3 pr-2.5 transition-colors",
+            "group/card relative overflow-hidden rounded-md py-2 pl-3 pr-2.5 transition-[background-color,opacity]",
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
+            !isActive && !thread.isUnread &&
+              (isWorking || thread.hasPendingInteraction) &&
+              "opacity-70 hover:opacity-100",
             // A thread open in another pane gets a weaker tint than the active
             // row, so the two states stay distinguishable.
             !isActive && layout !== null && "bg-sidebar-accent/30",
@@ -157,7 +162,11 @@ export function ThreadCard({
                 canPark && "group-hover/card:hidden",
               )}
             >
-              <StatusOrTime thread={thread} now={now} />
+              <StatusOrTime
+                thread={thread}
+                now={now}
+                animateStatusIcons={animateStatusIcons}
+              />
             </span>
           </div>
           <div

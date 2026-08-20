@@ -27,6 +27,7 @@ export function SlimRow({
   shelf,
   wakeAt,
   now,
+  animateStatusIcons,
   onNavigate,
   onRestore,
 }: {
@@ -40,6 +41,7 @@ export function SlimRow({
   shelf: "snoozed" | "settled";
   wakeAt: number | null;
   now: number;
+  animateStatusIcons: boolean;
   onNavigate: () => void;
   onRestore: () => void;
 }) {
@@ -104,7 +106,11 @@ export function SlimRow({
               {shelf === "snoozed" && wakeAt !== null ? (
                 snoozeWakeLabel(wakeAt, now)
               ) : (
-                <StatusOrTime thread={thread} now={now} />
+                <StatusOrTime
+                  thread={thread}
+                  now={now}
+                  animateStatusIcons={animateStatusIcons}
+                />
               )}
             </span>
             <button

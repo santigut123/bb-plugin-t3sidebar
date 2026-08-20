@@ -19,7 +19,7 @@ export function parseWorkingShimmerVariant(
   if (value === "beam" || value === "glow" || value === "sheen" || value === "off") {
     return value;
   }
-  return "glow";
+  return "off";
 }
 
 export function workingShimmerClass(variant: WorkingShimmerVariant): string | null {

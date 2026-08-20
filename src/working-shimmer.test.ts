@@ -5,10 +5,10 @@ import {
 } from "./working-shimmer";
 
 describe("working shimmer", () => {
-  it("parses known variants and falls back to beam", () => {
+  it("parses known variants and falls back to off", () => {
     expect(parseWorkingShimmerVariant("glow")).toBe("glow");
-    expect(parseWorkingShimmerVariant(undefined)).toBe("glow");
-    expect(parseWorkingShimmerVariant("nope")).toBe("glow");
+    expect(parseWorkingShimmerVariant(undefined)).toBe("off");
+    expect(parseWorkingShimmerVariant("nope")).toBe("off");
   });
 
   it("maps variants to css hooks", () => {

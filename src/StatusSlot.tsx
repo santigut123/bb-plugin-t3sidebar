@@ -1,7 +1,7 @@
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import {
   StatusGlyph,
-  hasStatusGlyph,
+  hasStatusPresentation,
   statusPresentation,
 } from "./StatusGlyph";
 import { cn } from "./lib/utils";
@@ -35,38 +35,63 @@ export const TRAILING_GLYPH_BOX_CLASS =
 export function StatusOrTime({
   thread,
   now,
+  animateStatusIcons = false,
 }: {
   thread: PluginSidebarThread;
   /** Quantized clock, shared by every row in one render. */
   now: number;
+  animateStatusIcons?: boolean;
 }) {
-  if (hasStatusGlyph(thread.indicator)) {
-    const presentation = statusPresentation(
-      thread.indicator,
-      thread.indicatorLabel,
-    );
-    if (presentation === null) return null;
-
+  if (hasStatusPresentation(thread.indicator)) {
     return (
-      <span
-        className={cn(
-          "flex items-center gap-1 whitespace-nowrap text-2xs font-medium",
-          presentation.toneClass,
-        )}
-      >
-        <StatusGlyph
-          indicator={thread.indicator}
-          label={thread.indicatorLabel}
-        />
-        {/* The glyph keeps bb's richer accessible label; this is its compact
-            visual shorthand, so exposing both would announce it twice. */}
-        <span aria-hidden="true">{presentation.shortLabel}</span>
-      </span>
+      <StatusLabel
+        thread={thread}
+        animateStatusIcons={animateStatusIcons}
+      />
     );
   }
   return (
     <span className="tabular-nums text-2xs text-muted-foreground">
       {relativeTimeLabel(thread.updatedAt, now)}
+    </span>
+  );
+}
+
+export function StatusLabel({
+  thread,
+  animateStatusIcons = false,
+  className,
+}: {
+  thread: PluginSidebarThread;
+  animateStatusIcons?: boolean;
+  className?: string;
+}) {
+  const presentation = statusPresentation(
+    thread.indicator,
+    thread.indicatorLabel,
+  );
+  if (presentation === null) return null;
+
+  return (
+    <span
+      role="status"
+      aria-label={thread.indicatorLabel ?? presentation.shortLabel}
+      className={cn(
+        "flex items-center gap-1 whitespace-nowrap text-xs font-medium",
+        presentation.toneClass,
+        className,
+      )}
+    >
+      <StatusGlyph
+        indicator={thread.indicator}
+        label={thread.indicatorLabel}
+        animateShine={animateStatusIcons}
+        decorative
+      />
+      {/* The containing status keeps bb's richer accessible label; this is
+          its compact visual shorthand, so exposing both would announce it
+          twice. */}
+      <span aria-hidden="true">{presentation.shortLabel}</span>
     </span>
   );
 }

@@ -28,6 +28,7 @@ import {
   parseBooleanSetting,
   parseUnreadTitleWeight,
   PROJECT_COLOR_STRIPES_SETTING_KEY,
+  STATUS_ICON_SHINE_SETTING_KEY,
   UNREAD_TITLE_WEIGHT_SETTING_KEY,
 } from "./appearance-settings";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
@@ -69,6 +70,10 @@ export function ThreadInbox({
   const projectColorStripes = parseBooleanSetting(
     settingsValues?.[PROJECT_COLOR_STRIPES_SETTING_KEY],
     true,
+  );
+  const animateStatusIcons = parseBooleanSetting(
+    settingsValues?.[STATUS_ICON_SHINE_SETTING_KEY],
+    false,
   );
   const unreadTitleWeight = parseUnreadTitleWeight(
     settingsValues?.[UNREAD_TITLE_WEIGHT_SETTING_KEY],
@@ -146,6 +151,7 @@ export function ThreadInbox({
     onResetProjectColor: () => projectColors.resetColor(thread.projectId),
     isWorking: isWorking(thread),
     workingShimmer,
+    animateStatusIcons,
     unreadTitleWeight,
     isActive: thread.id === activeThreadId,
     canPark: lifecycle.canPark(thread),
@@ -228,6 +234,7 @@ export function ThreadInbox({
               onToggle={() => setShowSnoozed((open) => !open)}
               shelf="snoozed"
               showCardDividers={showCardDividers}
+              animateStatusIcons={animateStatusIcons}
               activeThreadId={activeThreadId}
               lifecycle={lifecycle}
               projectNameById={projectNameById}
@@ -241,6 +248,7 @@ export function ThreadInbox({
               onToggle={() => setShowSettled((open) => !open)}
               shelf="settled"
               showCardDividers={showCardDividers}
+              animateStatusIcons={animateStatusIcons}
               activeThreadId={activeThreadId}
               lifecycle={lifecycle}
               projectNameById={projectNameById}
@@ -266,6 +274,7 @@ function ParkedShelf({
   onToggle,
   shelf,
   showCardDividers,
+  animateStatusIcons,
   activeThreadId,
   lifecycle,
   projectNameById,
@@ -278,6 +287,7 @@ function ParkedShelf({
   onToggle: () => void;
   shelf: "snoozed" | "settled";
   showCardDividers: boolean;
+  animateStatusIcons: boolean;
   activeThreadId: string | null;
   lifecycle: ReturnType<typeof useLifecycle>;
   projectNameById: ReadonlyMap<string, string>;
@@ -336,6 +346,7 @@ function ParkedShelf({
               shelf={shelf}
               wakeAt={lifecycle.wakeAtFor(thread)}
               now={now}
+              animateStatusIcons={animateStatusIcons}
               onNavigate={onNavigate}
               onRestore={() =>
                 shelf === "snoozed"

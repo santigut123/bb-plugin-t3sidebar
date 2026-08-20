@@ -124,13 +124,20 @@ export const t3sidebarSettings = {
     options: ["normal", "medium", "semibold", "bold"],
     default: "bold",
   },
+  statusIconShine: {
+    type: "boolean" as const,
+    label: "Status icon shine",
+    description:
+      "Animate workflow, agent, command, planning, and goal status icons.",
+    default: false,
+  },
   workingShimmer: {
     type: "select" as const,
     label: "Working card shimmer",
     description:
       "Animation on inbox cards while a thread is actively working. Beam is a tight highlight; Glow is softer and wider; Sheen stacks hard-edge highlight bands.",
     options: ["off", "beam", "glow", "sheen"],
-    default: "glow",
+    default: "off",
   },
 };
 
