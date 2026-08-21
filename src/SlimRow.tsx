@@ -18,18 +18,30 @@ import { snoozeWakeLabel } from "./lifecycle";
  */
 export function SlimRow({
   thread,
+  projectName,
+  projectHue,
+  hasCustomProjectColor,
+  onSetProjectColor,
+  onResetProjectColor,
   isActive,
   shelf,
   wakeAt,
   now,
+  animateStatusIcons,
   onNavigate,
   onRestore,
 }: {
   thread: PluginSidebarThread;
+  projectName: string | null;
+  projectHue: number;
+  hasCustomProjectColor: boolean;
+  onSetProjectColor: (hue: number) => void;
+  onResetProjectColor: () => void;
   isActive: boolean;
   shelf: "snoozed" | "settled";
   wakeAt: number | null;
   now: number;
+  animateStatusIcons: boolean;
   onNavigate: () => void;
   onRestore: () => void;
 }) {
@@ -37,7 +49,14 @@ export function SlimRow({
   const title = threadDisplayTitle(thread);
 
   return (
-    <RowContextMenu thread={thread}>
+    <RowContextMenu
+      thread={thread}
+      projectName={projectName}
+      projectHue={projectHue}
+      hasCustomProjectColor={hasCustomProjectColor}
+      onSetProjectColor={onSetProjectColor}
+      onResetProjectColor={onResetProjectColor}
+    >
       <li className="list-none">
         <div
           className={cn(
@@ -87,7 +106,11 @@ export function SlimRow({
               {shelf === "snoozed" && wakeAt !== null ? (
                 snoozeWakeLabel(wakeAt, now)
               ) : (
-                <StatusOrTime thread={thread} now={now} />
+                <StatusOrTime
+                  thread={thread}
+                  now={now}
+                  animateStatusIcons={animateStatusIcons}
+                />
               )}
             </span>
             <button

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   screen,
@@ -55,10 +56,34 @@ function thread(
 const listProps = {
   activeThreadId: null,
   activeProjectId: null,
+  experimental_Original: () => null,
   isCompactViewport: false,
   onNavigate: () => {},
   searchQuery: "",
 };
+
+function testRpc(
+  overrides: Record<string, (...args: unknown[]) => unknown> = {},
+) {
+  return {
+    listLifecycle: () => ({ rows: [] }),
+    listProjectColors: () => ({ rows: [] }),
+    listTurnStarts: () => ({ rows: [] }),
+    ...overrides,
+  };
+}
+
+function testSettings(
+  values: Record<string, string | boolean> = {
+    workingShimmer: "glow",
+    statusIconShine: false,
+    cardDividers: true,
+    projectColorStripes: true,
+    unreadTitleWeight: "bold",
+  },
+) {
+  return values;
+}
 
 function render(
   threads: PluginSidebarThread[],
@@ -68,11 +93,15 @@ function render(
     sidebarThreads: { status: "ready", threads, projects },
     // The lifecycle store is the plugin's own backend; an empty one means
     // every thread is active, which is what these list tests are about.
-    rpc: { listLifecycle: () => ({ rows: [] }) },
+    rpc: testRpc(),
+    settings: testSettings(),
   });
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("t3sidebar registration", () => {
   it("registers exactly one thread list", () => {
@@ -95,6 +124,48 @@ describe("ThreadInbox", () => {
     expect(titles[1]).toContain("Older");
   });
 
+  it("shows child threads directly beneath their parent", () => {
+    render([
+      thread({ id: "parent", title: "Parent", createdAt: 1 }),
+      thread({
+        id: "child",
+        title: "Child",
+        parentThreadId: "parent",
+        createdAt: 3,
+      }),
+      thread({ id: "other", title: "Unrelated", createdAt: 2 }),
+    ]);
+    expect(
+      screen.getAllByRole("listitem").map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Unrelated"),
+      expect.stringContaining("Parent"),
+      expect.stringContaining("Child"),
+    ]);
+    expect(screen.getByText("Child").closest("li")?.className).toContain(
+      "ml-4",
+    );
+  });
+
+  it("collapses and expands a parent's child threads", () => {
+    render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+    ]);
+
+    const collapse = screen.getByRole("button", {
+      name: "Collapse 1 child thread",
+    });
+    expect(collapse.parentElement?.className).toContain("h-4");
+    fireEvent.click(collapse);
+    expect(screen.queryByText("Child")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Expand 1 child thread" }),
+    );
+    expect(screen.getByText("Child")).toBeDefined();
+  });
+
   // The DOM contract behind numbered thread shortcuts and thread.next/previous.
   // A plugin that drops these attributes silently breaks nine host shortcuts.
   it("marks every row as a host shortcut target", () => {
@@ -115,7 +186,8 @@ describe("ThreadInbox", () => {
           threads: [thread({ id: "thr_open" })],
           projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
         },
-        rpc: { listLifecycle: () => ({ rows: [] }) },
+        rpc: testRpc(),
+        settings: testSettings(),
       },
     );
     fireEvent.click(screen.getByRole("link"));
@@ -161,7 +233,8 @@ describe("ThreadInbox", () => {
           ],
           projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
         },
-        rpc: { listLifecycle: () => ({ rows: [] }) },
+        rpc: testRpc(),
+        settings: testSettings(),
       },
     );
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
@@ -216,7 +289,7 @@ describe("parking threads", () => {
         threads: [thread({ id: "thr_done", title: "Finished work" })],
         projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
       },
-      rpc: {
+      rpc: testRpc({
         listLifecycle: () => ({
           rows: [
             {
@@ -227,7 +300,8 @@ describe("parking threads", () => {
             },
           ],
         }),
-      },
+      }),
+      settings: testSettings(),
     });
     // The shelf renders once the lifecycle read resolves.
     const shelf = await screen.findByRole("region", { name: "Settled" });
@@ -259,7 +333,7 @@ describe("parking threads", () => {
         projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
       },
       // Settled in the store, but still working: it must stay visible.
-      rpc: {
+      rpc: testRpc({
         listLifecycle: () => ({
           rows: [
             {
@@ -270,7 +344,8 @@ describe("parking threads", () => {
             },
           ],
         }),
-      },
+      }),
+      settings: testSettings(),
     });
     expect(await screen.findByText("Still running")).toBeDefined();
     expect(screen.queryByRole("region", { name: "Settled" })).toBeNull();
@@ -293,13 +368,13 @@ describe("parking threads", () => {
         threads: [thread({ id: "thr_park", title: "Quiet" })],
         projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
       },
-      rpc: {
-        listLifecycle: () => ({ rows: [] }),
+      rpc: testRpc({
         settle: (input) => {
           settled = (input as { threadId: string }).threadId;
           return { ok: true };
         },
-      },
+      }),
+      settings: testSettings(),
     });
     fireEvent.click(await screen.findByLabelText("Settle thread"));
     await waitFor(() => expect(settled).toBe("thr_park"));
@@ -313,7 +388,7 @@ describe("parking threads", () => {
         threads: [thread({ id: "thr_snz", title: "Later" })],
         projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
       },
-      rpc: {
+      rpc: testRpc({
         listLifecycle: () => ({
           rows: [
             {
@@ -324,7 +399,8 @@ describe("parking threads", () => {
             },
           ],
         }),
-      },
+      }),
+      settings: testSettings(),
     });
     const shelf = await screen.findByRole("region", { name: "Snoozed" });
     fireEvent.click(within(shelf).getByRole("button"));
@@ -345,7 +421,14 @@ describe("row context menu", () => {
       within(menu)
         .getAllByRole("menuitem")
         .map((item) => item.textContent),
-    ).toEqual(["Open in split", "Mark unread", "Pin", "Archive", "Delete"]);
+    ).toEqual([
+      "Open in split",
+      "Mark unread",
+      "Pin",
+      "bb color",
+      "Archive",
+      "Delete",
+    ]);
   });
 
   it("routes deletion through the host's confirmation", async () => {
@@ -358,6 +441,110 @@ describe("row context menu", () => {
         method: "requestDelete",
         threadId: "thr_del",
       }),
+    );
+  });
+
+  it("exposes project colors as an accessible radio group", async () => {
+    render([thread({ id: "thr_color", title: "Color me" })]);
+    fireEvent.contextMenu(await screen.findByText("Color me"));
+    const menu = await screen.findByRole("menu", { name: "Thread actions" });
+    const colorTrigger = within(menu).getByRole("menuitem", {
+      name: "bb color",
+    });
+    fireEvent.click(colorTrigger);
+    expect(colorTrigger.getAttribute("data-state")).toBe("open");
+
+    const colorMenu = await screen.findByRole("menu", {
+      name: "bb color",
+    });
+    const colorGroup = within(colorMenu).getByRole("group", {
+      name: "Project color swatch",
+    });
+    expect(within(colorGroup).getAllByRole("menuitemradio")).toHaveLength(16);
+  });
+});
+
+describe("project color synchronization", () => {
+  it("refreshes durable colors after realtime reconnects", async () => {
+    let rows = [{ projectId: "proj_1", hue: 12 }];
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_color" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({ listProjectColors: () => ({ rows }) }),
+      settings: testSettings(),
+      realtimeConnectionState: "connected",
+    });
+
+    await waitFor(() =>
+      expect(
+        rendered.inspection.rpcCalls.filter(
+          (call) => call.method === "listProjectColors",
+        ),
+      ).toHaveLength(1),
+    );
+    await rendered.behavior.setRealtimeConnectionState("reconnecting");
+    rows = [{ projectId: "proj_1", hue: 204 }];
+    await rendered.behavior.setRealtimeConnectionState("connected");
+
+    await waitFor(() =>
+      expect(
+        rendered.inspection.rpcCalls.filter(
+          (call) => call.method === "listProjectColors",
+        ),
+      ).toHaveLength(2),
+    );
+  });
+
+  it("refreshes after a local project color mutation", async () => {
+    let rows = [{ projectId: "proj_1", hue: 12 }];
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_color", title: "Color me" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listProjectColors: () => ({ rows }),
+        setProjectColor: (input) => {
+          rows = [input as { projectId: string; hue: number }];
+          return { ok: true };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    await waitFor(() =>
+      expect(
+        rendered.inspection.rpcCalls.filter(
+          (call) => call.method === "listProjectColors",
+        ),
+      ).toHaveLength(1),
+    );
+    fireEvent.contextMenu(await screen.findByText("Color me"));
+    const menu = await screen.findByRole("menu", { name: "Thread actions" });
+    const colorTrigger = within(menu).getByRole("menuitem", {
+      name: "bb color",
+    });
+    fireEvent.click(colorTrigger);
+    expect(colorTrigger.getAttribute("data-state")).toBe("open");
+    const colorMenu = await screen.findByRole("menu", {
+      name: "bb color",
+    });
+    fireEvent.click(
+      within(colorMenu).getByRole("menuitemradio", {
+        name: "Set project color 204",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(
+        rendered.inspection.rpcCalls.filter(
+          (call) => call.method === "listProjectColors",
+        ),
+      ).toHaveLength(2),
     );
   });
 });
@@ -444,25 +631,23 @@ describe("card metadata", () => {
 // they use bb's own glyphs: the two lists sit in one window, and a user who
 // switches between them should not have to learn a second vocabulary.
 describe("attention states", () => {
-  const iconStates = [
+  const textStates = [
     [
       "waiting-for-input",
       "Thread needs user input",
-      "Input needed",
-      "CircleQuestion",
-      "text-warning-text",
+      "Input",
+      "text-primary",
     ],
     [
       "unread-error",
       "Unread thread failed",
-      "Error",
-      "CircleX",
+      "Failed",
       "text-destructive-text",
     ],
   ] as const;
 
-  for (const [indicator, label, visibleLabel, icon, color] of iconStates) {
-    it(`shows a labeled, colored ${indicator} glyph instead of the age`, async () => {
+  for (const [indicator, label, visibleLabel, color] of textStates) {
+    it(`shows a labeled, colored ${indicator} status instead of the age`, async () => {
       render([
         thread({
           id: `thr_${indicator}`,
@@ -471,15 +656,15 @@ describe("attention states", () => {
           updatedAt: Date.now() - (3 * 3_600_000 + 60_000),
         }),
       ]);
-      const glyph = await screen.findByLabelText(label);
-      expect(glyph.getAttribute("data-icon")).toBe(icon);
-      expect(glyph.getAttribute("class")).toContain(color);
+      const status = await screen.findByRole("status", { name: label });
+      expect(status.getAttribute("class")).toContain(color);
+      expect(status.querySelector("[data-icon]")).toBeNull();
       expect(screen.getByText(visibleLabel)).toBeDefined();
       expect(screen.queryByText("3h")).toBeNull();
     });
   }
 
-  it("uses a success-colored dot for an unread success", async () => {
+  it("uses a success-colored check for an unread success", async () => {
     render([
       thread({
         id: "thr_success",
@@ -487,14 +672,15 @@ describe("attention states", () => {
         indicatorLabel: "Unread thread succeeded",
       }),
     ]);
-    const glyph = await screen.findByLabelText("Unread thread succeeded");
-    expect(glyph.querySelector(".bg-success")).not.toBeNull();
-    expect(screen.getByText("Success")).toBeDefined();
+    const status = await screen.findByRole("status", {
+      name: "Unread thread succeeded",
+    });
+    expect(status.querySelector('[data-icon="CircleCheck"]')).not.toBeNull();
+    expect(status.getAttribute("class")).toContain("text-success");
+    expect(screen.getByText("Done")).toBeDefined();
   });
 
-  // Running work is still identified by shape and motion, so color is an
-  // additional signal rather than the only way to read the state.
-  it("shows a primary-colored spinner while work runs", async () => {
+  it("shows T3's static timeline-colored dashed circle while work runs", async () => {
     render([
       thread({
         id: "thr_busy",
@@ -503,15 +689,94 @@ describe("attention states", () => {
         indicatorLabel: "Thread working",
       }),
     ]);
-    const glyph = await screen.findByLabelText("Thread working");
-    expect(glyph.getAttribute("data-icon")).toBe("Loading");
-    expect(glyph.getAttribute("class")).toContain("text-primary");
-    expect(glyph.getAttribute("class")).toContain("animate-spin");
+    const status = await screen.findByRole("status", {
+      name: "Thread working",
+    });
+    const glyph = status.querySelector('[data-icon="CircleDashed"]');
+    expect(glyph).not.toBeNull();
+    expect(glyph?.getAttribute("class")).toContain("text-timeline-accent");
+    expect(glyph?.getAttribute("class")).not.toContain("animate-spin");
+    expect(status.getAttribute("class")).toContain("text-xs");
+    expect(status.getAttribute("class")).not.toContain("text-2xs");
     expect(screen.getByText("Working")).toBeDefined();
     expect(screen.queryByLabelText("Unread thread succeeded")).toBeNull();
   });
 
-  it("shows a pulsing timeline-colored radar while monitoring", async () => {
+  it("ticks the working duration from the backend turn start", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(40_000);
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "thr_busy",
+            indicator: "runtime",
+            indicatorLabel: "Thread working",
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listTurnStarts: () => ({
+          rows: [{ threadId: "thr_busy", startedAt: 5_000 }],
+        }),
+      }),
+      settings: testSettings(),
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const status = screen.getByRole("status", { name: "Thread working" });
+    expect(status.textContent).toBe("Working35s");
+
+    act(() => vi.advanceTimersByTime(2_000));
+    expect(status.textContent).toBe("Working37s");
+  });
+
+  it("replaces a previous task's duration when the new turn start arrives", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(40_000);
+    let startedAt: number | null = null;
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "thr_busy",
+            indicator: "runtime",
+            indicatorLabel: "Thread working",
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listTurnStarts: () => ({
+          rows: [{ threadId: "thr_busy", startedAt }],
+        }),
+      }),
+      settings: testSettings(),
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const status = screen.getByRole("status", { name: "Thread working" });
+    expect(status.textContent).toBe("Working");
+
+    startedAt = 30_000;
+    await rendered.behavior.emitRealtime("turn-starts", {
+      threadId: "thr_busy",
+      startedAt,
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(status.textContent).toBe("Working10s");
+  });
+
+  it("shows monitoring as quiet timeline-colored text", async () => {
     render([
       thread({
         id: "thr_monitoring",
@@ -519,11 +784,11 @@ describe("attention states", () => {
         indicatorLabel: "Monitoring repository",
       }),
     ]);
-    const glyph = await screen.findByLabelText("Monitoring repository");
-    expect(glyph.getAttribute("data-icon")).toBe("Radar");
-    expect(glyph.getAttribute("class")).toContain("text-timeline-accent");
-    expect(glyph.getAttribute("class")).toContain("animate-pulse");
-    expect(glyph.getAttribute("class")).not.toContain("animate-spin");
+    const status = await screen.findByRole("status", {
+      name: "Monitoring repository",
+    });
+    expect(status.getAttribute("class")).toContain("text-timeline-accent");
+    expect(status.querySelector("[data-icon]")).toBeNull();
     expect(screen.getByText("Monitoring")).toBeDefined();
   });
 
@@ -564,12 +829,46 @@ describe("attention states", () => {
       render([
         thread({ id: `thr_${indicator}`, indicator, indicatorLabel: label }),
       ]);
-      const glyph = await screen.findByLabelText(label);
+      const status = await screen.findByRole("status", { name: label });
+      const glyph = status.querySelector("[data-icon]");
+      if (glyph === null) throw new Error(`Missing ${icon} status glyph`);
       expect(glyph.getAttribute("data-icon")).toBe(icon);
       expect(glyph.getAttribute("class")).toContain(color);
+      expect(glyph.getAttribute("class")).not.toContain("animate-shine-icon");
       expect(screen.getByText(visibleLabel)).toBeDefined();
     });
   }
+
+  it("keeps activity-icon shine available as an opt-in setting", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "thr_workflow",
+            indicator: "workflow",
+            indicatorLabel: "Workflow running",
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc(),
+      settings: testSettings({
+        workingShimmer: "off",
+        statusIconShine: true,
+        cardDividers: true,
+        projectColorStripes: true,
+        unreadTitleWeight: "bold",
+      }),
+    });
+
+    const status = await screen.findByRole("status", {
+      name: "Workflow running",
+    });
+    expect(status.querySelector("[data-icon]")?.getAttribute("class")).toContain(
+      "animate-shine-icon",
+    );
+  });
 
   it("labels draft work", async () => {
     render([
@@ -583,6 +882,59 @@ describe("attention states", () => {
   });
 });
 
+describe("in-flight card treatment", () => {
+  it("recedes an inactive working card but not an unread one", async () => {
+    render([
+      thread({
+        id: "thr_read",
+        title: "Read work",
+        indicator: "runtime",
+        indicatorLabel: "Working",
+      }),
+      thread({
+        id: "thr_unread",
+        title: "Unread work",
+        indicator: "runtime",
+        indicatorLabel: "Working",
+        isUnread: true,
+      }),
+    ]);
+
+    const readCard = (await screen.findByRole("link", {
+      name: "Read work",
+    })).parentElement;
+    const unreadCard = screen.getByRole("link", {
+      name: "Unread work",
+    }).parentElement;
+    expect(readCard?.getAttribute("class")).toContain("opacity-70");
+    expect(unreadCard?.getAttribute("class")).not.toContain("opacity-70");
+  });
+
+  it("keeps the active working card at full opacity", async () => {
+    renderSlot(inbox, { ...listProps, activeThreadId: "thr_active" }, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "thr_active",
+            title: "Active work",
+            indicator: "runtime",
+            indicatorLabel: "Working",
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc(),
+      settings: testSettings(),
+    });
+
+    const card = (await screen.findByRole("link", {
+      name: "Active work",
+    })).parentElement;
+    expect(card?.getAttribute("class")).not.toContain("opacity-70");
+  });
+});
+
 describe("pull request badge", () => {
   const withPr = (attention: string, state = "open") =>
     renderSlot(inbox, listProps, {
@@ -591,7 +943,8 @@ describe("pull request badge", () => {
         threads: [thread({ id: "thr_pr" })],
         projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
       },
-      rpc: { listLifecycle: () => ({ rows: [] }) },
+      rpc: testRpc(),
+      settings: testSettings(),
       sidebarPullRequests: {
         thr_pr: {
           number: 412,

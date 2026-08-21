@@ -3,8 +3,8 @@
 An inbox-style replacement for bb's sidebar thread list, and the reference
 example for `app.slots.experimental_threadList`.
 
-This fork adds colored status indicators, including a distinct monitoring
-state. Install it from GitHub:
+This plugin started as an example in the BB repository. Install its public
+release from GitHub:
 
 ```sh
 bb plugin install git:https://github.com/santigut123/bb-plugin-t3sidebar.git@v0.2.0
@@ -20,10 +20,10 @@ scope picker.
 
 ## The idea
 
-The list never re-orders itself. Threads sort by creation time, newest first,
-and hold that place until you park them. Status lives inside each card instead
-of in its position, so the sidebar only moves when you act — no row slides
-away under your cursor because an agent finished something.
+Root threads never re-order themselves. They sort by creation time, newest
+first, while descendants stay directly beneath their parent until parked.
+Status lives inside each card instead of in its position, so no row slides away
+under your cursor because an agent finished something.
 
 Three shelves:
 
@@ -35,34 +35,34 @@ Three shelves:
   One slot shows a glyph and compact status label while a thread has something
   to say, and the aligned age ("now", "7m") once it does not. The statuses use
   bb's semantic theme colors:
-  destructive for failures, warning for input and plan mode, success for
-  goals and completed work, primary for foreground work, and timeline accent
-  for background work. A monitoring runtime gets its own pulsing radar. Shape,
-  motion, and accessible labels preserve the meaning without relying on color
-  alone.
+  destructive for failures, primary for input and workflows, warning for plan
+  mode, success for goals and completed work, and timeline accent for runtime
+  and background work. Monitoring is shown as quiet timeline-colored text.
+  Shape, text, and accessible labels preserve the meaning without relying on
+  color alone; activity-icon shine remains available as an opt-in setting.
 
 - **Snoozed** — hidden until a wake time you chose. A snoozed thread comes
   back early if it starts working or asks you something.
 - **Settled** — work you are done with, collapsed to one line each.
 
-## Child threads live in the header
+## Child threads stay visible
 
-A flat inbox has nowhere to nest a child thread, so the list hides a child
-while its parent is on screen. Two chips in the thread header carry that
-relation instead:
+Child threads sit directly beneath their parent as staggered rows with a subtle
+left guide. Parent rows show a child-count toggle; children start expanded and
+can be collapsed as a group. Orphans stay in the root creation order. Two chips
+in the thread header provide quicker navigation:
 
 - On a parent: a chip with one coloured disc per child. It opens the list of
   children.
-- On a child: a chip that names the parent and opens it. Without it the child
-  is a dead end, because it is not in the list.
+- On a child: a chip that names and opens the parent.
 
 The parent chip sits on the left of the children chip, so the header reads up
 then down. A child that has children of its own shows both. Each disc takes
 its colour from the thread id, so the same thread keeps one colour in the list
 and in both chips.
 
-An orphan — a child whose parent is deleted — stays in the list, and its
-header shows no parent chip.
+An orphan — a child whose parent is deleted or filtered out — remains a normal
+root row, and its header shows no parent chip.
 
 ## What it demonstrates
 

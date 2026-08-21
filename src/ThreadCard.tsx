@@ -11,6 +11,13 @@ import { ProviderGlyph } from "./ProviderGlyph";
 import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
 import { threadDisplayTitle } from "./inbox";
 import { resolveSnoozePresets } from "./lifecycle";
+import type { ProjectAccent } from "./project-colors";
+import { WorkingShimmer } from "./WorkingShimmer";
+import type { WorkingShimmerVariant } from "./working-shimmer";
+import {
+  type UnreadTitleWeight,
+  unreadTitleWeightClass,
+} from "./appearance-settings";
 
 /**
  * One thread as a three-line card: project and status, title, then branch and
@@ -24,7 +31,21 @@ import { resolveSnoozePresets } from "./lifecycle";
 export function ThreadCard({
   thread,
   projectName,
+  projectAccent,
+  showProjectAccent,
+  hasCustomProjectColor,
+  onSetProjectColor,
+  onResetProjectColor,
+  isWorking,
+  workingShimmer,
+  animateStatusIcons,
+  turnStartedAt,
+  unreadTitleWeight,
   isActive,
+  isChild,
+  childCount,
+  childrenCollapsed,
+  onToggleChildren,
   canPark,
   onNavigate,
   onSettle,
@@ -33,7 +54,24 @@ export function ThreadCard({
 }: {
   thread: PluginSidebarThread;
   projectName: string | null;
+  projectAccent: ProjectAccent;
+  /** False when the list is scoped to one project — the stripe adds no signal. */
+  showProjectAccent: boolean;
+  hasCustomProjectColor: boolean;
+  onSetProjectColor: (hue: number) => void;
+  onResetProjectColor: () => void;
+  /** True while live work is running on the thread. */
+  isWorking: boolean;
+  workingShimmer: WorkingShimmerVariant;
+  animateStatusIcons: boolean;
+  /** Latest active turn start, used only by the self-ticking Working label. */
+  turnStartedAt: number | null;
+  unreadTitleWeight: UnreadTitleWeight;
   isActive: boolean;
+  isChild: boolean;
+  childCount: number;
+  childrenCollapsed: boolean;
+  onToggleChildren: () => void;
   /** False while the thread is working or blocked on the user. */
   canPark: boolean;
   onNavigate: () => void;
@@ -49,17 +87,42 @@ export function ThreadCard({
   const { pullRequest } = useSidebarThreadPullRequest(thread.id);
 
   return (
-    <RowContextMenu thread={thread}>
-      <li className="list-none">
+    <RowContextMenu
+      thread={thread}
+      projectName={projectName}
+      projectHue={projectAccent.hue}
+      hasCustomProjectColor={hasCustomProjectColor}
+      onSetProjectColor={onSetProjectColor}
+      onResetProjectColor={onResetProjectColor}
+    >
+      <li
+        className={cn(
+          "list-none",
+          isChild && "ml-4 border-l border-sidebar-border pl-1",
+        )}
+      >
         <div
           className={cn(
-            "group/card relative rounded-md px-2.5 py-2 transition-colors",
+            "group/card relative overflow-hidden rounded-md py-2 pl-3 pr-2.5 transition-[background-color,opacity]",
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
+            !isActive && !thread.isUnread &&
+              (isWorking || thread.hasPendingInteraction) &&
+              "opacity-70 hover:opacity-100",
             // A thread open in another pane gets a weaker tint than the active
             // row, so the two states stay distinguishable.
             !isActive && layout !== null && "bg-sidebar-accent/30",
           )}
         >
+          {isWorking && workingShimmer !== "off" ? (
+            <WorkingShimmer variant={workingShimmer} />
+          ) : null}
+          {showProjectAccent ? (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute bottom-1.5 left-0.5 top-1.5 w-[3px] rounded-full"
+              style={{ backgroundColor: projectAccent.stripe }}
+            />
+          ) : null}
           <a
             // Both attributes, or bb's nine thread shortcuts stop finding rows.
             data-sidebar-thread-shortcut-target=""
@@ -76,8 +139,10 @@ export function ThreadCard({
             }}
             className="absolute inset-0 cursor-pointer rounded-md"
           />
-          <div className="pointer-events-none relative flex h-5 items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate text-2xs font-medium text-muted-foreground">
+          <div className="pointer-events-none relative z-[1] flex h-5 items-center gap-1.5">
+            <span
+              className="min-w-0 flex-1 truncate text-2xs font-medium text-muted-foreground"
+            >
               {projectName ?? " "}
             </span>
             {/* Status at rest, park actions on hover. Only the status yields,
@@ -104,7 +169,12 @@ export function ThreadCard({
                 canPark && "group-hover/card:hidden",
               )}
             >
-              <StatusOrTime thread={thread} now={now} />
+              <StatusOrTime
+                thread={thread}
+                now={now}
+                animateStatusIcons={animateStatusIcons}
+                turnStartedAt={turnStartedAt}
+              />
             </span>
           </div>
           <div
@@ -112,13 +182,13 @@ export function ThreadCard({
               // Weight alone carries unread. Fading the title — or the whole
               // card — makes a thread at rest read as disabled, and at rest is
               // what most of the list is most of the time.
-              "pointer-events-none relative mt-0.5 truncate text-sm text-foreground",
-              thread.isUnread && "font-medium",
+              "pointer-events-none relative z-[1] mt-0.5 truncate text-sm text-foreground",
+              thread.isUnread && unreadTitleWeightClass(unreadTitleWeight),
             )}
           >
             {threadDisplayTitle(thread)}
           </div>
-          <div className="pointer-events-none relative mt-0.5 flex h-4 items-center gap-1.5 text-2xs text-muted-foreground">
+          <div className="pointer-events-none relative z-[1] mt-0.5 flex h-4 items-center gap-1.5 text-2xs text-muted-foreground">
             {/* A thread without a worktree still runs somewhere, so the
                 machine takes the branch's place rather than leaving the line
                 blank. */}
@@ -167,8 +237,30 @@ export function ThreadCard({
                 #{pullRequest.number}
               </a>
             ) : null}
-            {/* Always drawn, so the line has a fixed right edge. */}
             <ProviderGlyph providerId={thread.providerId} />
+            {childCount > 0 ? (
+              <button
+                type="button"
+                aria-expanded={!childrenCollapsed}
+                aria-label={`${childrenCollapsed ? "Expand" : "Collapse"} ${childCount} child ${childCount === 1 ? "thread" : "threads"}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onToggleChildren();
+                }}
+                className="pointer-events-auto flex shrink-0 items-center gap-0.5 rounded px-0.5 text-2xs text-muted-foreground hover:text-foreground"
+              >
+                <Icon
+                  name="ChevronDown"
+                  aria-hidden
+                  className={cn(
+                    "size-3 transition-transform",
+                    childrenCollapsed && "-rotate-90",
+                  )}
+                />
+                <span aria-hidden="true">{childCount}</span>
+              </button>
+            ) : null}
           </div>
         </div>
       </li>

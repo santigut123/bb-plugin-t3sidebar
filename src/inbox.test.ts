@@ -3,11 +3,12 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import {
   childrenOf,
   filterByProject,
-  hideChildrenOfVisibleParents,
+  hideCollapsedDescendants,
   parentOf,
   partitionPinned,
   searchThreadsByTitle,
   sortByCreatedAtDescending,
+  sortByThreadHierarchy,
   threadDisplayTitle,
   visibleInboxThreads,
 } from "./inbox";
@@ -156,21 +157,38 @@ describe("filtering", () => {
 });
 
 describe("child threads", () => {
-  it("hides a child whose parent is on screen", () => {
-    const visible = hideChildrenOfVisibleParents([
-      thread({ id: "parent" }),
-      thread({ id: "child", parentThreadId: "parent" }),
-    ]);
-    expect(visible.map((t) => t.id)).toEqual(["parent"]);
+  it("places descendants directly after their parent", () => {
+    expect(
+      sortByThreadHierarchy([
+        thread({ id: "parent", createdAt: 1 }),
+        thread({ id: "child", parentThreadId: "parent", createdAt: 3 }),
+        thread({ id: "other", createdAt: 2 }),
+        thread({ id: "grandchild", parentThreadId: "child", createdAt: 4 }),
+      ]).map((item) => item.id),
+    ).toEqual(["other", "parent", "child", "grandchild"]);
   });
 
-  // An orphan must stay visible: hidden here AND absent from any header chip
-  // would make it unreachable everywhere.
-  it("keeps a child whose parent is not on screen", () => {
-    const visible = hideChildrenOfVisibleParents([
-      thread({ id: "child", parentThreadId: "archived-parent" }),
-    ]);
-    expect(visible.map((t) => t.id)).toEqual(["child"]);
+  it("keeps an orphan in the root creation order", () => {
+    expect(
+      sortByThreadHierarchy([
+        thread({ id: "older", createdAt: 1 }),
+        thread({ id: "orphan", parentThreadId: "missing", createdAt: 2 }),
+      ]).map((item) => item.id),
+    ).toEqual(["orphan", "older"]);
+  });
+
+  it("hides every descendant of a collapsed parent", () => {
+    expect(
+      hideCollapsedDescendants(
+        [
+          thread({ id: "parent" }),
+          thread({ id: "child", parentThreadId: "parent" }),
+          thread({ id: "grandchild", parentThreadId: "child" }),
+          thread({ id: "other" }),
+        ],
+        new Set(["parent"]),
+      ).map((item) => item.id),
+    ).toEqual(["parent", "other"]);
   });
 
   it("lists a thread's children oldest first", () => {
@@ -188,8 +206,8 @@ describe("child threads", () => {
 });
 
 describe("parentOf", () => {
-  // The list hides an archived parent, but the child's header must still get
-  // it back — otherwise the child is a dead end.
+  // An archived parent is absent from the inbox but remains reachable from
+  // the child's header.
   it("finds a parent the inbox filters out", () => {
     const parent = parentOf(
       [

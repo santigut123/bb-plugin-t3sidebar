@@ -2,19 +2,23 @@ import { useState } from "react";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
+  useSettings,
   type PluginSidebarThread,
   type PluginThreadHeaderActionProps,
 } from "@get-bb/plugin-sdk/app";
 import { cn } from "./lib/utils";
 import { Disc } from "./Disc";
-import { StatusGlyph } from "./StatusGlyph";
+import { StatusLabel } from "./StatusSlot";
+import {
+  parseBooleanSetting,
+  STATUS_ICON_SHINE_SETTING_KEY,
+} from "./appearance-settings";
 import { childrenOf, threadDisplayTitle } from "./inbox";
 
 const MAX_DISCS = 3;
 
 /**
- * The home for child threads the flat list hides: a chip in the thread header
- * that opens the list of this thread's children.
+ * A quick-access chip in the thread header that opens this thread's children.
  *
  * These are bb CHILD THREADS — forks, side chats, and plugin-spawned threads.
  * bb's in-turn subagents are activity counters on the parent, not threads, so
@@ -26,6 +30,11 @@ export function SubagentsChip({
 }: PluginThreadHeaderActionProps) {
   const { threads } = useSidebarThreads();
   const actions = useSidebarThreadActions();
+  const { values: settingsValues } = useSettings();
+  const animateStatusIcons = parseBooleanSetting(
+    settingsValues?.[STATUS_ICON_SHINE_SETTING_KEY],
+    false,
+  );
   const [open, setOpen] = useState(false);
 
   const children = childrenOf(threads, threadId);
@@ -91,9 +100,10 @@ export function SubagentsChip({
                         {child.originKind ?? "thread"}
                       </span>
                     </span>
-                    <StatusGlyph
-                      indicator={child.indicator}
-                      label={child.indicatorLabel}
+                    <StatusLabel
+                      thread={child}
+                      animateStatusIcons={animateStatusIcons}
+                      className="shrink-0"
                     />
                   </button>
                 </li>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
+  useSettings,
   type PluginSidebarThread,
   type PluginThreadListProps,
 } from "@get-bb/plugin-sdk/app";
@@ -16,21 +17,37 @@ import {
 } from "./components/Select";
 import { ThreadCard } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
-import { useLifecycle } from "./useLifecycle";
+import { useLifecycle, isWorking } from "./useLifecycle";
+import { useProjectColors } from "./useProjectColors";
+import {
+  parseWorkingShimmerVariant,
+  WORKING_SHIMMER_SETTING_KEY,
+} from "./working-shimmer";
+import {
+  CARD_DIVIDERS_SETTING_KEY,
+  parseBooleanSetting,
+  parseUnreadTitleWeight,
+  PROJECT_COLOR_STRIPES_SETTING_KEY,
+  STATUS_ICON_SHINE_SETTING_KEY,
+  UNREAD_TITLE_WEIGHT_SETTING_KEY,
+} from "./appearance-settings";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
+import { statusPresentation } from "./StatusGlyph";
+import { useTurnStarts } from "./useTurnStarts";
 import {
   filterByProject,
-  hideChildrenOfVisibleParents,
+  hideCollapsedDescendants,
   partitionPinned,
   searchThreadsByTitle,
   sortByCreatedAtDescending,
+  sortByThreadHierarchy,
   visibleInboxThreads,
 } from "./inbox";
 
 const ALL_PROJECTS = "__all__";
 
 /**
- * The sidebar's scrolling list: one flat, statically ordered stack of cards.
+ * The sidebar's scrolling list: stable root cards with descendants beneath.
  *
  * The host owns the New-thread button and the search field above it, so this
  * ships neither. It filters by the `searchQuery` prop and keeps only the one
@@ -44,6 +61,26 @@ export function ThreadInbox({
   const { status, threads, projects } = useSidebarThreads();
   const actions = useSidebarThreadActions();
   const lifecycle = useLifecycle(threads);
+  const projectColors = useProjectColors();
+  const { values: settingsValues } = useSettings();
+  const workingShimmer = parseWorkingShimmerVariant(
+    settingsValues?.[WORKING_SHIMMER_SETTING_KEY],
+  );
+  const showCardDividers = parseBooleanSetting(
+    settingsValues?.[CARD_DIVIDERS_SETTING_KEY],
+    true,
+  );
+  const projectColorStripes = parseBooleanSetting(
+    settingsValues?.[PROJECT_COLOR_STRIPES_SETTING_KEY],
+    true,
+  );
+  const animateStatusIcons = parseBooleanSetting(
+    settingsValues?.[STATUS_ICON_SHINE_SETTING_KEY],
+    false,
+  );
+  const unreadTitleWeight = parseUnreadTitleWeight(
+    settingsValues?.[UNREAD_TITLE_WEIGHT_SETTING_KEY],
+  );
   const [scope, setScope] = useState<string>(ALL_PROJECTS);
   // One clock for every card in a render, quantized to the minute so the
   // labels do not disagree and do not churn on unrelated re-renders.
@@ -60,6 +97,9 @@ export function ThreadInbox({
   const now = nowMinute * 60_000;
   const [showSnoozed, setShowSnoozed] = useState(false);
   const [showSettled, setShowSettled] = useState(false);
+  const [collapsedParentIds, setCollapsedParentIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
 
   const projectNameById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
@@ -71,12 +111,7 @@ export function ThreadInbox({
       visibleInboxThreads(threads),
       scope === ALL_PROJECTS ? null : scope,
     );
-    // Children live in their parent's header chip instead of the flat list;
-    // an orphan whose parent is not on screen stays here.
-    const matched = searchThreadsByTitle(
-      hideChildrenOfVisibleParents(scoped),
-      searchQuery,
-    );
+    const matched = searchThreadsByTitle(scoped, searchQuery);
     const active: typeof matched = [];
     const onSnoozeShelf: typeof matched = [];
     const onSettledShelf: typeof matched = [];
@@ -88,8 +123,8 @@ export function ThreadInbox({
     }
     const split = partitionPinned(active);
     return {
-      pinned: sortByCreatedAtDescending(split.pinned),
-      inbox: sortByCreatedAtDescending(split.inbox),
+      pinned: sortByThreadHierarchy(split.pinned),
+      inbox: sortByThreadHierarchy(split.inbox),
       // Soonest wake first: "what comes back next" is the shelf's question.
       snoozed: [...onSnoozeShelf].sort(
         (left, right) =>
@@ -99,10 +134,75 @@ export function ThreadInbox({
     };
   }, [lifecycle, scope, searchQuery, threads]);
 
+  const displayedPinned = hideCollapsedDescendants(
+    pinned,
+    collapsedParentIds,
+  );
+  const displayedInbox = hideCollapsedDescendants(inbox, collapsedParentIds);
+  const timedThreadIds = useMemo(
+    () =>
+      [...displayedPinned, ...displayedInbox]
+        .filter(
+          (thread) =>
+            statusPresentation(thread.indicator, thread.indicatorLabel)
+              ?.shortLabel === "Working",
+        )
+        .map((thread) => thread.id)
+        .slice(0, 100),
+    [displayedInbox, displayedPinned],
+  );
+  const turnStarts = useTurnStarts(timedThreadIds);
+  const pinnedIds = new Set(pinned.map((thread) => thread.id));
+  const inboxIds = new Set(inbox.map((thread) => thread.id));
+  const pinnedChildCounts = directChildCounts(pinned);
+  const inboxChildCounts = directChildCounts(inbox);
+
+  const toggleChildren = (threadId: string) => {
+    setCollapsedParentIds((current) => {
+      const next = new Set(current);
+      if (next.has(threadId)) next.delete(threadId);
+      else next.add(threadId);
+      return next;
+    });
+  };
+
   const scopeLabel =
     scope === ALL_PROJECTS
       ? "All projects"
       : (projectNameById.get(scope) ?? "All projects");
+  const showProjectAccent =
+    projectColorStripes && scope === ALL_PROJECTS;
+
+  const threadCardProps = (
+    thread: PluginSidebarThread,
+    visibleIds: ReadonlySet<string>,
+    childCounts: ReadonlyMap<string, number>,
+  ) => ({
+    thread,
+    projectName: projectNameById.get(thread.projectId) ?? null,
+    projectAccent: projectColors.accentFor(thread.projectId),
+    showProjectAccent,
+    hasCustomProjectColor: projectColors.hasCustomColor(thread.projectId),
+    onSetProjectColor: (hue: number) =>
+      projectColors.setColor(thread.projectId, hue),
+    onResetProjectColor: () => projectColors.resetColor(thread.projectId),
+    isWorking: isWorking(thread),
+    workingShimmer,
+    animateStatusIcons,
+    turnStartedAt: turnStarts.get(thread.id) ?? null,
+    unreadTitleWeight,
+    isActive: thread.id === activeThreadId,
+    isChild:
+      thread.parentThreadId !== null && visibleIds.has(thread.parentThreadId),
+    childCount: childCounts.get(thread.id) ?? 0,
+    childrenCollapsed: collapsedParentIds.has(thread.id),
+    onToggleChildren: () => toggleChildren(thread.id),
+    canPark: lifecycle.canPark(thread),
+    onNavigate,
+    onSettle: () => lifecycle.settle(thread.id),
+    onSnooze: (until: number) => lifecycle.snooze(thread.id, until),
+    now,
+  });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -154,35 +254,28 @@ export function ThreadInbox({
         ) : (
           <>
             {pinned.length > 0 ? (
-              <Shelf label="Pinned">
-                {pinned.map((thread) => (
+              <Shelf label="Pinned" showCardDividers={showCardDividers}>
+                {displayedPinned.map((thread) => (
                   <ThreadCard
                     key={thread.id}
-                    thread={thread}
-                    projectName={projectNameById.get(thread.projectId) ?? null}
-                    isActive={thread.id === activeThreadId}
-                    canPark={lifecycle.canPark(thread)}
-                    onNavigate={onNavigate}
-                    onSettle={() => lifecycle.settle(thread.id)}
-                    onSnooze={(until) => lifecycle.snooze(thread.id, until)}
-                    now={now}
+                    {...threadCardProps(
+                      thread,
+                      pinnedIds,
+                      pinnedChildCounts,
+                    )}
                   />
                 ))}
               </Shelf>
             ) : null}
             {inbox.length > 0 ? (
-              <Shelf label={pinned.length > 0 ? "Inbox" : null}>
-                {inbox.map((thread) => (
+              <Shelf
+                label={pinned.length > 0 ? "Inbox" : null}
+                showCardDividers={showCardDividers}
+              >
+                {displayedInbox.map((thread) => (
                   <ThreadCard
                     key={thread.id}
-                    thread={thread}
-                    projectName={projectNameById.get(thread.projectId) ?? null}
-                    isActive={thread.id === activeThreadId}
-                    canPark={lifecycle.canPark(thread)}
-                    onNavigate={onNavigate}
-                    onSettle={() => lifecycle.settle(thread.id)}
-                    onSnooze={(until) => lifecycle.snooze(thread.id, until)}
-                    now={now}
+                    {...threadCardProps(thread, inboxIds, inboxChildCounts)}
                   />
                 ))}
               </Shelf>
@@ -193,8 +286,12 @@ export function ThreadInbox({
               expanded={showSnoozed}
               onToggle={() => setShowSnoozed((open) => !open)}
               shelf="snoozed"
+              showCardDividers={showCardDividers}
+              animateStatusIcons={animateStatusIcons}
               activeThreadId={activeThreadId}
               lifecycle={lifecycle}
+              projectNameById={projectNameById}
+              projectColors={projectColors}
               onNavigate={onNavigate}
             />
             <ParkedShelf
@@ -203,8 +300,12 @@ export function ThreadInbox({
               expanded={showSettled}
               onToggle={() => setShowSettled((open) => !open)}
               shelf="settled"
+              showCardDividers={showCardDividers}
+              animateStatusIcons={animateStatusIcons}
               activeThreadId={activeThreadId}
               lifecycle={lifecycle}
+              projectNameById={projectNameById}
+              projectColors={projectColors}
               onNavigate={onNavigate}
             />
           </>
@@ -212,6 +313,22 @@ export function ThreadInbox({
       </div>
     </div>
   );
+}
+
+function directChildCounts(
+  threads: readonly PluginSidebarThread[],
+): ReadonlyMap<string, number> {
+  const ids = new Set(threads.map((thread) => thread.id));
+  const counts = new Map<string, number>();
+  for (const thread of threads) {
+    if (thread.parentThreadId && ids.has(thread.parentThreadId)) {
+      counts.set(
+        thread.parentThreadId,
+        (counts.get(thread.parentThreadId) ?? 0) + 1,
+      );
+    }
+  }
+  return counts;
 }
 
 /**
@@ -225,8 +342,12 @@ function ParkedShelf({
   expanded,
   onToggle,
   shelf,
+  showCardDividers,
+  animateStatusIcons,
   activeThreadId,
   lifecycle,
+  projectNameById,
+  projectColors,
   onNavigate,
 }: {
   label: string;
@@ -234,8 +355,12 @@ function ParkedShelf({
   expanded: boolean;
   onToggle: () => void;
   shelf: "snoozed" | "settled";
+  showCardDividers: boolean;
+  animateStatusIcons: boolean;
   activeThreadId: string | null;
   lifecycle: ReturnType<typeof useLifecycle>;
+  projectNameById: ReadonlyMap<string, string>;
+  projectColors: ReturnType<typeof useProjectColors>;
   onNavigate: () => void;
 }) {
   if (threads.length === 0) return null;
@@ -265,15 +390,32 @@ function ParkedShelf({
         </span>
       </button>
       {expanded ? (
-        <ul className="flex flex-col gap-px">
+        <ul
+          className={cn(
+            "flex flex-col",
+            showCardDividers && "divide-y divide-sidebar-border/50",
+          )}
+        >
           {threads.map((thread) => (
             <SlimRow
               key={thread.id}
               thread={thread}
+              projectName={projectNameById.get(thread.projectId) ?? null}
+              projectHue={projectColors.accentFor(thread.projectId).hue}
+              hasCustomProjectColor={projectColors.hasCustomColor(
+                thread.projectId,
+              )}
+              onSetProjectColor={(hue) =>
+                projectColors.setColor(thread.projectId, hue)
+              }
+              onResetProjectColor={() =>
+                projectColors.resetColor(thread.projectId)
+              }
               isActive={thread.id === activeThreadId}
               shelf={shelf}
               wakeAt={lifecycle.wakeAtFor(thread)}
               now={now}
+              animateStatusIcons={animateStatusIcons}
               onNavigate={onNavigate}
               onRestore={() =>
                 shelf === "snoozed"
@@ -290,9 +432,11 @@ function ParkedShelf({
 
 function Shelf({
   label,
+  showCardDividers,
   children,
 }: {
   label: string | null;
+  showCardDividers: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -307,7 +451,14 @@ function Shelf({
           <span className="h-px flex-1 bg-sidebar-border" />
         </h2>
       ) : null}
-      <ul className="flex flex-col gap-px">{children}</ul>
+      <ul
+        className={cn(
+          "flex flex-col",
+          showCardDividers && "divide-y divide-sidebar-border/50",
+        )}
+      >
+        {children}
+      </ul>
     </section>
   );
 }
