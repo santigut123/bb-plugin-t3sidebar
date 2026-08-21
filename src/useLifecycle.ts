@@ -107,12 +107,27 @@ export function useLifecycle(
         resolveShelf(rows.get(thread.id), signalsFor(thread), now),
       canPark: (thread) => canPark(signalsFor(thread)),
       wakeAtFor: (thread) => rows.get(thread.id)?.snoozedUntil ?? null,
-      settle: (threadId) => void mutate("settle", threadId),
+      settle: (threadId) => {
+        const parentById = new Map(
+          threads.map((thread) => [thread.id, thread.parentThreadId]),
+        );
+        const seen = new Set<string>();
+        const family: string[] = [];
+        for (
+          let id: string | null = threadId;
+          id !== null && !seen.has(id);
+          id = parentById.get(id) ?? null
+        ) {
+          seen.add(id);
+          family.push(id);
+        }
+        void Promise.all(family.map((id) => mutate("settle", id)));
+      },
       unsettle: (threadId) => void mutate("unsettle", threadId),
       unsnooze: (threadId) => void mutate("unsnooze", threadId),
       snooze: (threadId, snoozedUntil) => {
         void rpc.call("snooze", { threadId, snoozedUntil });
       },
     };
-  }, [now, refresh, rows, rpc]);
+  }, [now, refresh, rows, rpc, threads]);
 }

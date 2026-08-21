@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Settling a child thread now settles its parent chain with it.
 - Child threads now remain visible directly beneath their parent as staggered,
   collapsible sidebar rows while retaining the parent and children header
   shortcuts.
