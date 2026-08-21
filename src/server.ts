@@ -113,6 +113,7 @@ export const t3sidebarRpcContract = defineRpcContract({
 /** Channel the frontend re-reads on. */
 export const LIFECYCLE_CHANNEL = "lifecycle";
 export const PROJECT_COLORS_CHANNEL = "project-colors";
+export const TURN_STARTS_CHANNEL = "turn-starts";
 
 export const t3sidebarSettings = {
   cardDividers: {
@@ -208,17 +209,24 @@ export default function plugin(bb: BbPluginApi) {
     bb.realtime.publish(PROJECT_COLORS_CHANNEL, { projectId });
   };
 
+  const activeTurnStartedAt = async (
+    threadId: string,
+  ): Promise<number | null> => {
+    const [latest] = await bb.sdk.threads.events.list({
+      threadId,
+      types: ["turn/started", "turn/completed"],
+      order: "desc",
+      limit: "1",
+    });
+    return latest?.type === "turn/started" ? latest.createdAt : null;
+  };
+
   bb.rpc.register(t3sidebarRpcContract, {
     async listTurnStarts({ threadIds }) {
       const rows = await Promise.all(
         [...new Set(threadIds)].map(async (threadId) => {
-          const [latest] = await bb.sdk.threads.events.list({
-            threadId,
-            types: ["turn/started"],
-            order: "desc",
-            limit: "1",
-          });
-          return { threadId, startedAt: latest?.createdAt ?? null };
+          const startedAt = await activeTurnStartedAt(threadId);
+          return { threadId, startedAt };
         }),
       );
       return { rows };
@@ -276,9 +284,35 @@ export default function plugin(bb: BbPluginApi) {
     },
   });
 
+  let disposed = false;
+  const unsubscribeTurnStarts = bb.sdk.subscribe({
+    event: "thread:changed",
+    callback: (event) => {
+      const threadId = event.id;
+      if (
+        threadId === undefined ||
+        !event.metadata?.eventTypes?.includes("turn/started")
+      ) {
+        return;
+      }
+      void activeTurnStartedAt(threadId)
+        .then((startedAt) => {
+          if (!disposed && startedAt !== null) {
+            bb.realtime.publish(TURN_STARTS_CHANNEL, { threadId, startedAt });
+          }
+        })
+        .catch(() => undefined);
+    },
+  });
+
   // A deleted thread must not leave a row behind that would park a future
   // thread reusing the id, and stale rows accumulate otherwise.
   bb.events.on("thread.deleted", ({ thread }) => {
     clear(thread.id);
+  });
+
+  bb.onDispose(() => {
+    disposed = true;
+    unsubscribeTurnStarts();
   });
 }

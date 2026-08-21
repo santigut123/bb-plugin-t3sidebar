@@ -693,6 +693,47 @@ describe("attention states", () => {
     expect(status.textContent).toBe("Working37s");
   });
 
+  it("replaces a previous task's duration when the new turn start arrives", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(40_000);
+    let startedAt: number | null = null;
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({
+            id: "thr_busy",
+            indicator: "runtime",
+            indicatorLabel: "Thread working",
+          }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listTurnStarts: () => ({
+          rows: [{ threadId: "thr_busy", startedAt }],
+        }),
+      }),
+      settings: testSettings(),
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const status = screen.getByRole("status", { name: "Thread working" });
+    expect(status.textContent).toBe("Working");
+
+    startedAt = 30_000;
+    await rendered.behavior.emitRealtime("turn-starts", {
+      threadId: "thr_busy",
+      startedAt,
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(status.textContent).toBe("Working10s");
+  });
+
   it("shows monitoring as quiet timeline-colored text", async () => {
     render([
       thread({
