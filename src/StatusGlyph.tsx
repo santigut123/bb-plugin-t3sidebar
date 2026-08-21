@@ -4,7 +4,7 @@ import { cn } from "./lib/utils";
 
 /**
  * This plugin's status glyphs use bb's own sidebar shapes and semantic theme
- * colors. Shape, motion, and the host-provided accessible label carry the
+ * colors. Shape, text, and the host-provided accessible label carry the
  * meaning; color reinforces it without becoming the only signal.
  *
  * The SDK ships `indicator` as data and no status component on purpose, so a
@@ -118,9 +118,9 @@ export function StatusGlyph({
       }
       return (
         <Icon
-          name="Loading"
+          name="CircleDashed"
           aria-label={aria}
-          className={cn(shared, "animate-spin", tone)}
+          className={cn(shared, tone)}
         />
       );
     case "workflow":

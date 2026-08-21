@@ -503,9 +503,9 @@ describe("attention states", () => {
     expect(screen.getByText("Success")).toBeDefined();
   });
 
-  // Running work is still identified by shape and motion, so color is an
-  // additional signal rather than the only way to read the state.
-  it("shows a primary-colored spinner while work runs", async () => {
+  // Running work is identified by a static dashed circle and visible text, so
+  // color remains an additional signal rather than the only one.
+  it("shows a static primary-colored circle while work runs", async () => {
     render([
       thread({
         id: "thr_busy",
@@ -515,9 +515,9 @@ describe("attention states", () => {
       }),
     ]);
     const glyph = await screen.findByLabelText("Thread working");
-    expect(glyph.getAttribute("data-icon")).toBe("Loading");
+    expect(glyph.getAttribute("data-icon")).toBe("CircleDashed");
     expect(glyph.getAttribute("class")).toContain("text-primary");
-    expect(glyph.getAttribute("class")).toContain("animate-spin");
+    expect(glyph.getAttribute("class")).not.toContain("animate-spin");
     expect(screen.getByText("Working")).toBeDefined();
     expect(screen.queryByLabelText("Unread thread succeeded")).toBeNull();
   });
