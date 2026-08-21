@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Child threads now remain visible as staggered sidebar rows while retaining
+  the parent and children header shortcuts.
+
 ## 0.2.0 - 2026-08-20
 
 ### Added

@@ -3,7 +3,6 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import {
   childrenOf,
   filterByProject,
-  hideChildrenOfVisibleParents,
   parentOf,
   partitionPinned,
   searchThreadsByTitle,
@@ -156,23 +155,6 @@ describe("filtering", () => {
 });
 
 describe("child threads", () => {
-  it("hides a child whose parent is on screen", () => {
-    const visible = hideChildrenOfVisibleParents([
-      thread({ id: "parent" }),
-      thread({ id: "child", parentThreadId: "parent" }),
-    ]);
-    expect(visible.map((t) => t.id)).toEqual(["parent"]);
-  });
-
-  // An orphan must stay visible: hidden here AND absent from any header chip
-  // would make it unreachable everywhere.
-  it("keeps a child whose parent is not on screen", () => {
-    const visible = hideChildrenOfVisibleParents([
-      thread({ id: "child", parentThreadId: "archived-parent" }),
-    ]);
-    expect(visible.map((t) => t.id)).toEqual(["child"]);
-  });
-
   it("lists a thread's children oldest first", () => {
     const children = childrenOf(
       [
@@ -188,8 +170,8 @@ describe("child threads", () => {
 });
 
 describe("parentOf", () => {
-  // The list hides an archived parent, but the child's header must still get
-  // it back — otherwise the child is a dead end.
+  // An archived parent is absent from the inbox but remains reachable from
+  // the child's header.
   it("finds a parent the inbox filters out", () => {
     const parent = parentOf(
       [

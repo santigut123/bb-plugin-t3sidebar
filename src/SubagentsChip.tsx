@@ -13,8 +13,7 @@ import { childrenOf, threadDisplayTitle } from "./inbox";
 const MAX_DISCS = 3;
 
 /**
- * The home for child threads the flat list hides: a chip in the thread header
- * that opens the list of this thread's children.
+ * A quick-access chip in the thread header that opens this thread's children.
  *
  * These are bb CHILD THREADS — forks, side chats, and plugin-spawned threads.
  * bb's in-turn subagents are activity counters on the parent, not threads, so

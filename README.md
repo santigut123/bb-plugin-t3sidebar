@@ -45,24 +45,22 @@ Three shelves:
   back early if it starts working or asks you something.
 - **Settled** — work you are done with, collapsed to one line each.
 
-## Child threads live in the header
+## Child threads stay visible
 
-A flat inbox has nowhere to nest a child thread, so the list hides a child
-while its parent is on screen. Two chips in the thread header carry that
-relation instead:
+Child threads remain in the newest-first list as staggered rows with a subtle
+left guide. Two chips in the thread header provide quicker navigation:
 
 - On a parent: a chip with one coloured disc per child. It opens the list of
   children.
-- On a child: a chip that names the parent and opens it. Without it the child
-  is a dead end, because it is not in the list.
+- On a child: a chip that names and opens the parent.
 
 The parent chip sits on the left of the children chip, so the header reads up
 then down. A child that has children of its own shows both. Each disc takes
 its colour from the thread id, so the same thread keeps one colour in the list
 and in both chips.
 
-An orphan — a child whose parent is deleted — stays in the list, and its
-header shows no parent chip.
+An orphan — a child whose parent is deleted — remains staggered in the list,
+and its header shows no parent chip.
 
 ## What it demonstrates
 

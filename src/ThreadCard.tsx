@@ -25,6 +25,7 @@ export function ThreadCard({
   thread,
   projectName,
   isActive,
+  isChild,
   canPark,
   onNavigate,
   onSettle,
@@ -34,6 +35,7 @@ export function ThreadCard({
   thread: PluginSidebarThread;
   projectName: string | null;
   isActive: boolean;
+  isChild: boolean;
   /** False while the thread is working or blocked on the user. */
   canPark: boolean;
   onNavigate: () => void;
@@ -50,7 +52,12 @@ export function ThreadCard({
 
   return (
     <RowContextMenu thread={thread}>
-      <li className="list-none">
+      <li
+        className={cn(
+          "list-none",
+          isChild && "ml-4 border-l border-sidebar-border pl-1",
+        )}
+      >
         <div
           className={cn(
             "group/card relative rounded-md px-2.5 py-2 transition-colors",

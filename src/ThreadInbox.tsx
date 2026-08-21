@@ -20,7 +20,6 @@ import { useLifecycle } from "./useLifecycle";
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import {
   filterByProject,
-  hideChildrenOfVisibleParents,
   partitionPinned,
   searchThreadsByTitle,
   sortByCreatedAtDescending,
@@ -71,12 +70,7 @@ export function ThreadInbox({
       visibleInboxThreads(threads),
       scope === ALL_PROJECTS ? null : scope,
     );
-    // Children live in their parent's header chip instead of the flat list;
-    // an orphan whose parent is not on screen stays here.
-    const matched = searchThreadsByTitle(
-      hideChildrenOfVisibleParents(scoped),
-      searchQuery,
-    );
+    const matched = searchThreadsByTitle(scoped, searchQuery);
     const active: typeof matched = [];
     const onSnoozeShelf: typeof matched = [];
     const onSettledShelf: typeof matched = [];
@@ -161,6 +155,7 @@ export function ThreadInbox({
                     thread={thread}
                     projectName={projectNameById.get(thread.projectId) ?? null}
                     isActive={thread.id === activeThreadId}
+                    isChild={thread.parentThreadId !== null}
                     canPark={lifecycle.canPark(thread)}
                     onNavigate={onNavigate}
                     onSettle={() => lifecycle.settle(thread.id)}
@@ -178,6 +173,7 @@ export function ThreadInbox({
                     thread={thread}
                     projectName={projectNameById.get(thread.projectId) ?? null}
                     isActive={thread.id === activeThreadId}
+                    isChild={thread.parentThreadId !== null}
                     canPark={lifecycle.canPark(thread)}
                     onNavigate={onNavigate}
                     onSettle={() => lifecycle.settle(thread.id)}

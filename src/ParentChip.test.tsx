@@ -68,8 +68,7 @@ function render(
 afterEach(cleanup);
 
 describe("ParentChip", () => {
-  // The whole reason the chip exists: the list hides the child, so this is its
-  // only route back.
+  // The header shortcut opens the same parent shown in the sidebar.
   it("opens the parent on click", () => {
     const rendered = render(
       [

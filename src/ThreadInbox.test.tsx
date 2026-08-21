@@ -95,6 +95,17 @@ describe("ThreadInbox", () => {
     expect(titles[1]).toContain("Older");
   });
 
+  it("shows child threads as staggered sidebar rows", () => {
+    render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+    ]);
+    expect(screen.getByText("Parent")).toBeDefined();
+    expect(screen.getByText("Child").closest("li")?.className).toContain(
+      "ml-4",
+    );
+  });
+
   // The DOM contract behind numbered thread shortcuts and thread.next/previous.
   // A plugin that drops these attributes silently breaks nine host shortcuts.
   it("marks every row as a host shortcut target", () => {
