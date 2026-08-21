@@ -48,8 +48,9 @@ Three shelves:
 ## Child threads stay visible
 
 Child threads sit directly beneath their parent as staggered rows with a subtle
-left guide. Orphans stay in the root creation order. Two chips in the thread
-header provide quicker navigation:
+left guide. Parent rows show a child-count toggle; children start expanded and
+can be collapsed as a group. Orphans stay in the root creation order. Two chips
+in the thread header provide quicker navigation:
 
 - On a parent: a chip with one coloured disc per child. It opens the list of
   children.

@@ -3,6 +3,7 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import {
   childrenOf,
   filterByProject,
+  hideCollapsedDescendants,
   parentOf,
   partitionPinned,
   searchThreadsByTitle,
@@ -174,6 +175,20 @@ describe("child threads", () => {
         thread({ id: "orphan", parentThreadId: "missing", createdAt: 2 }),
       ]).map((item) => item.id),
     ).toEqual(["orphan", "older"]);
+  });
+
+  it("hides every descendant of a collapsed parent", () => {
+    expect(
+      hideCollapsedDescendants(
+        [
+          thread({ id: "parent" }),
+          thread({ id: "child", parentThreadId: "parent" }),
+          thread({ id: "grandchild", parentThreadId: "child" }),
+          thread({ id: "other" }),
+        ],
+        new Set(["parent"]),
+      ).map((item) => item.id),
+    ).toEqual(["parent", "other"]);
   });
 
   it("lists a thread's children oldest first", () => {

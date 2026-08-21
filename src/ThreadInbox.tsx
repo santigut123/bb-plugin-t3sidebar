@@ -36,6 +36,7 @@ import { statusPresentation } from "./StatusGlyph";
 import { useTurnStarts } from "./useTurnStarts";
 import {
   filterByProject,
+  hideCollapsedDescendants,
   partitionPinned,
   searchThreadsByTitle,
   sortByCreatedAtDescending,
@@ -96,6 +97,9 @@ export function ThreadInbox({
   const now = nowMinute * 60_000;
   const [showSnoozed, setShowSnoozed] = useState(false);
   const [showSettled, setShowSettled] = useState(false);
+  const [collapsedParentIds, setCollapsedParentIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
 
   const projectNameById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
@@ -130,9 +134,14 @@ export function ThreadInbox({
     };
   }, [lifecycle, scope, searchQuery, threads]);
 
+  const displayedPinned = hideCollapsedDescendants(
+    pinned,
+    collapsedParentIds,
+  );
+  const displayedInbox = hideCollapsedDescendants(inbox, collapsedParentIds);
   const timedThreadIds = useMemo(
     () =>
-      [...pinned, ...inbox]
+      [...displayedPinned, ...displayedInbox]
         .filter(
           (thread) =>
             statusPresentation(thread.indicator, thread.indicatorLabel)
@@ -140,11 +149,22 @@ export function ThreadInbox({
         )
         .map((thread) => thread.id)
         .slice(0, 100),
-    [inbox, pinned],
+    [displayedInbox, displayedPinned],
   );
   const turnStarts = useTurnStarts(timedThreadIds);
   const pinnedIds = new Set(pinned.map((thread) => thread.id));
   const inboxIds = new Set(inbox.map((thread) => thread.id));
+  const pinnedChildCounts = directChildCounts(pinned);
+  const inboxChildCounts = directChildCounts(inbox);
+
+  const toggleChildren = (threadId: string) => {
+    setCollapsedParentIds((current) => {
+      const next = new Set(current);
+      if (next.has(threadId)) next.delete(threadId);
+      else next.add(threadId);
+      return next;
+    });
+  };
 
   const scopeLabel =
     scope === ALL_PROJECTS
@@ -156,6 +176,7 @@ export function ThreadInbox({
   const threadCardProps = (
     thread: PluginSidebarThread,
     visibleIds: ReadonlySet<string>,
+    childCounts: ReadonlyMap<string, number>,
   ) => ({
     thread,
     projectName: projectNameById.get(thread.projectId) ?? null,
@@ -173,6 +194,9 @@ export function ThreadInbox({
     isActive: thread.id === activeThreadId,
     isChild:
       thread.parentThreadId !== null && visibleIds.has(thread.parentThreadId),
+    childCount: childCounts.get(thread.id) ?? 0,
+    childrenCollapsed: collapsedParentIds.has(thread.id),
+    onToggleChildren: () => toggleChildren(thread.id),
     canPark: lifecycle.canPark(thread),
     onNavigate,
     onSettle: () => lifecycle.settle(thread.id),
@@ -231,10 +255,14 @@ export function ThreadInbox({
           <>
             {pinned.length > 0 ? (
               <Shelf label="Pinned" showCardDividers={showCardDividers}>
-                {pinned.map((thread) => (
+                {displayedPinned.map((thread) => (
                   <ThreadCard
                     key={thread.id}
-                    {...threadCardProps(thread, pinnedIds)}
+                    {...threadCardProps(
+                      thread,
+                      pinnedIds,
+                      pinnedChildCounts,
+                    )}
                   />
                 ))}
               </Shelf>
@@ -244,10 +272,10 @@ export function ThreadInbox({
                 label={pinned.length > 0 ? "Inbox" : null}
                 showCardDividers={showCardDividers}
               >
-                {inbox.map((thread) => (
+                {displayedInbox.map((thread) => (
                   <ThreadCard
                     key={thread.id}
-                    {...threadCardProps(thread, inboxIds)}
+                    {...threadCardProps(thread, inboxIds, inboxChildCounts)}
                   />
                 ))}
               </Shelf>
@@ -285,6 +313,22 @@ export function ThreadInbox({
       </div>
     </div>
   );
+}
+
+function directChildCounts(
+  threads: readonly PluginSidebarThread[],
+): ReadonlyMap<string, number> {
+  const ids = new Set(threads.map((thread) => thread.id));
+  const counts = new Map<string, number>();
+  for (const thread of threads) {
+    if (thread.parentThreadId && ids.has(thread.parentThreadId)) {
+      counts.set(
+        thread.parentThreadId,
+        (counts.get(thread.parentThreadId) ?? 0) + 1,
+      );
+    }
+  }
+  return counts;
 }
 
 /**

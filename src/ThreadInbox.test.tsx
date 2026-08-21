@@ -127,7 +127,12 @@ describe("ThreadInbox", () => {
   it("shows child threads directly beneath their parent", () => {
     render([
       thread({ id: "parent", title: "Parent", createdAt: 1 }),
-      thread({ id: "child", title: "Child", parentThreadId: "parent", createdAt: 3 }),
+      thread({
+        id: "child",
+        title: "Child",
+        parentThreadId: "parent",
+        createdAt: 3,
+      }),
       thread({ id: "other", title: "Unrelated", createdAt: 2 }),
     ]);
     expect(
@@ -140,6 +145,23 @@ describe("ThreadInbox", () => {
     expect(screen.getByText("Child").closest("li")?.className).toContain(
       "ml-4",
     );
+  });
+
+  it("collapses and expands a parent's child threads", () => {
+    render([
+      thread({ id: "parent", title: "Parent" }),
+      thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+    ]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Collapse 1 child thread" }),
+    );
+    expect(screen.queryByText("Child")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Expand 1 child thread" }),
+    );
+    expect(screen.getByText("Child")).toBeDefined();
   });
 
   // The DOM contract behind numbered thread shortcuts and thread.next/previous.

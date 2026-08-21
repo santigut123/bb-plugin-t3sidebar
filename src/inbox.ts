@@ -66,6 +66,24 @@ export function sortByThreadHierarchy<
   return result;
 }
 
+export function hideCollapsedDescendants<
+  T extends { readonly id: string; readonly parentThreadId: string | null },
+>(threads: readonly T[], collapsedParentIds: ReadonlySet<string>): T[] {
+  const byId = new Map(threads.map((thread) => [thread.id, thread]));
+  return threads.filter((thread) => {
+    const seen = new Set<string>();
+    let parentId = thread.parentThreadId;
+    while (parentId && !seen.has(parentId)) {
+      const parent = byId.get(parentId);
+      if (!parent) break;
+      if (collapsedParentIds.has(parentId)) return false;
+      seen.add(parentId);
+      parentId = parent.parentThreadId;
+    }
+    return true;
+  });
+}
+
 export function threadDisplayTitle(thread: PluginSidebarThread): string {
   const title = thread.title?.trim();
   if (title) return title;
