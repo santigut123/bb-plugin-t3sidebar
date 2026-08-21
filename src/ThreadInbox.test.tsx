@@ -153,9 +153,11 @@ describe("ThreadInbox", () => {
       thread({ id: "child", title: "Child", parentThreadId: "parent" }),
     ]);
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Collapse 1 child thread" }),
-    );
+    const collapse = screen.getByRole("button", {
+      name: "Collapse 1 child thread",
+    });
+    expect(collapse.parentElement?.className).toContain("h-4");
+    fireEvent.click(collapse);
     expect(screen.queryByText("Child")).toBeNull();
 
     fireEvent.click(

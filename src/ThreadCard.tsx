@@ -145,29 +145,6 @@ export function ThreadCard({
             >
               {projectName ?? " "}
             </span>
-            {childCount > 0 ? (
-              <button
-                type="button"
-                aria-expanded={!childrenCollapsed}
-                aria-label={`${childrenCollapsed ? "Expand" : "Collapse"} ${childCount} child ${childCount === 1 ? "thread" : "threads"}`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onToggleChildren();
-                }}
-                className="pointer-events-auto flex shrink-0 items-center gap-0.5 rounded px-0.5 text-2xs text-muted-foreground hover:text-foreground"
-              >
-                <Icon
-                  name="ChevronDown"
-                  aria-hidden
-                  className={cn(
-                    "size-3 transition-transform",
-                    childrenCollapsed && "-rotate-90",
-                  )}
-                />
-                <span aria-hidden="true">{childCount}</span>
-              </button>
-            ) : null}
             {/* Status at rest, park actions on hover. Only the status yields,
                 so the project name never shifts. */}
             {canPark ? (
@@ -260,8 +237,30 @@ export function ThreadCard({
                 #{pullRequest.number}
               </a>
             ) : null}
-            {/* Always drawn, so the line has a fixed right edge. */}
             <ProviderGlyph providerId={thread.providerId} />
+            {childCount > 0 ? (
+              <button
+                type="button"
+                aria-expanded={!childrenCollapsed}
+                aria-label={`${childrenCollapsed ? "Expand" : "Collapse"} ${childCount} child ${childCount === 1 ? "thread" : "threads"}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onToggleChildren();
+                }}
+                className="pointer-events-auto flex shrink-0 items-center gap-0.5 rounded px-0.5 text-2xs text-muted-foreground hover:text-foreground"
+              >
+                <Icon
+                  name="ChevronDown"
+                  aria-hidden
+                  className={cn(
+                    "size-3 transition-transform",
+                    childrenCollapsed && "-rotate-90",
+                  )}
+                />
+                <span aria-hidden="true">{childCount}</span>
+              </button>
+            ) : null}
           </div>
         </div>
       </li>
