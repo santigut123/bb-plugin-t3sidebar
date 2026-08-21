@@ -3,8 +3,8 @@
 An inbox-style replacement for bb's sidebar thread list, and the reference
 example for `app.slots.experimental_threadList`.
 
-This fork adds colored status indicators, including a distinct monitoring
-state. Install it from GitHub:
+This plugin started as an example in the BB repository. Install its public
+release from GitHub:
 
 ```sh
 bb plugin install git:https://github.com/santigut123/bb-plugin-t3sidebar.git@v0.2.0
@@ -35,11 +35,11 @@ Three shelves:
   One slot shows a glyph and compact status label while a thread has something
   to say, and the aligned age ("now", "7m") once it does not. The statuses use
   bb's semantic theme colors:
-  destructive for failures, warning for input and plan mode, success for
-  goals and completed work, primary for foreground work, and timeline accent
-  for background work. A monitoring runtime gets its own pulsing radar. Shape,
-  motion, and accessible labels preserve the meaning without relying on color
-  alone.
+  destructive for failures, primary for input and workflows, warning for plan
+  mode, success for goals and completed work, and timeline accent for runtime
+  and background work. Monitoring is shown as quiet timeline-colored text.
+  Shape, text, and accessible labels preserve the meaning without relying on
+  color alone; activity-icon shine remains available as an opt-in setting.
 
 - **Snoozed** — hidden until a wake time you chose. A snoozed thread comes
   back early if it starts working or asks you something.

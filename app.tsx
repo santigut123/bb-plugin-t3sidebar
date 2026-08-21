@@ -8,6 +8,7 @@ import { definePluginApp } from "@get-bb/plugin-sdk/app";
 import { ThreadInbox } from "./src/ThreadInbox";
 import { ParentChip } from "./src/ParentChip";
 import { SubagentsChip } from "./src/SubagentsChip";
+import "./src/working-shimmer.css";
 
 export default definePluginApp((app) => {
   app.slots.experimental_threadList({

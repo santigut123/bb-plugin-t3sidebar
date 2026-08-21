@@ -5,6 +5,10 @@ import {
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
 import { cn } from "./lib/utils";
+import {
+  PROJECT_COLOR_SWATCH_HUES,
+  projectAccentFromHue,
+} from "./project-colors";
 
 /**
  * This sidebar's own right-click menu.
@@ -17,9 +21,19 @@ import { cn } from "./lib/utils";
  */
 export function RowContextMenu({
   thread,
+  projectName,
+  projectHue,
+  hasCustomProjectColor,
+  onSetProjectColor,
+  onResetProjectColor,
   children,
 }: {
   thread: PluginSidebarThread;
+  projectName: string | null;
+  projectHue: number;
+  hasCustomProjectColor: boolean;
+  onSetProjectColor: (hue: number) => void;
+  onResetProjectColor: () => void;
   children: ReactNode;
 }) {
   const actions = useSidebarThreadActions();
@@ -47,6 +61,56 @@ export function RowContextMenu({
             {thread.isPinned ? "Unpin" : "Pin"}
           </Item>
           <Separator />
+          <ContextMenu.Sub>
+            <ContextMenu.SubTrigger className="cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground">
+              {projectName ? `${projectName} color` : "Project color"}
+            </ContextMenu.SubTrigger>
+            <ContextMenu.Portal>
+              <ContextMenu.SubContent
+                className="z-50 w-52 rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md"
+              >
+                <ContextMenu.RadioGroup
+                  className="grid grid-cols-8 gap-1.5"
+                  aria-label="Project color swatch"
+                  value={hasCustomProjectColor ? String(projectHue) : ""}
+                  onValueChange={(value) => onSetProjectColor(Number(value))}
+                >
+                  {PROJECT_COLOR_SWATCH_HUES.map((hue) => {
+                    const selected =
+                      hasCustomProjectColor && projectHue === hue;
+                    return (
+                      <ContextMenu.RadioItem
+                        key={hue}
+                        value={String(hue)}
+                        aria-label={`Set project color ${hue}`}
+                        className={cn(
+                          "flex size-5 cursor-pointer items-center justify-center rounded-full outline-none",
+                          "data-[highlighted]:ring-2 data-[highlighted]:ring-ring",
+                          selected && "ring-2 ring-foreground",
+                        )}
+                      >
+                        <span
+                          className="size-4 rounded-full border border-background/40"
+                          style={{
+                            backgroundColor:
+                              projectAccentFromHue(hue).stripe,
+                          }}
+                        />
+                      </ContextMenu.RadioItem>
+                    );
+                  })}
+                </ContextMenu.RadioGroup>
+                <Separator />
+                <Item
+                  onSelect={onResetProjectColor}
+                  disabled={!hasCustomProjectColor}
+                >
+                  Use automatic color
+                </Item>
+              </ContextMenu.SubContent>
+            </ContextMenu.Portal>
+          </ContextMenu.Sub>
+          <Separator />
           <Item onSelect={() => actions.archive(thread.id)}>Archive</Item>
           <Item destructive onSelect={() => actions.requestDelete(thread.id)}>
             Delete
@@ -60,18 +124,22 @@ export function RowContextMenu({
 function Item({
   children,
   destructive = false,
+  disabled = false,
   onSelect,
 }: {
   children: ReactNode;
   destructive?: boolean;
+  disabled?: boolean;
   onSelect: () => void;
 }) {
   return (
     <ContextMenu.Item
+      disabled={disabled}
       onSelect={onSelect}
       className={cn(
         "cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none",
         "data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground",
+        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         destructive && "text-destructive-text",
       )}
     >

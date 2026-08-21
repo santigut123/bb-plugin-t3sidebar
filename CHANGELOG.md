@@ -6,7 +6,10 @@
 
 - Child threads now remain visible as staggered sidebar rows while retaining
   the parent and children header shortcuts.
-- Working threads use a static dashed circle instead of a spinning indicator.
+- Restored the previous status presentation: compact Failed, Input, Done,
+  Monitoring, and activity indicators, including the static dashed Working
+  circle.
+- Working threads again show a live elapsed time for the current turn.
 
 ## 0.2.0 - 2026-08-20
 
