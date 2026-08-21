@@ -401,6 +401,110 @@ describe("row context menu", () => {
       }),
     );
   });
+
+  it("exposes project colors as an accessible radio group", async () => {
+    render([thread({ id: "thr_color", title: "Color me" })]);
+    fireEvent.contextMenu(await screen.findByText("Color me"));
+    const menu = await screen.findByRole("menu", { name: "Thread actions" });
+    const colorTrigger = within(menu).getByRole("menuitem", {
+      name: "bb color",
+    });
+    fireEvent.click(colorTrigger);
+    expect(colorTrigger.getAttribute("data-state")).toBe("open");
+
+    const colorMenu = await screen.findByRole("menu", {
+      name: "bb color",
+    });
+    const colorGroup = within(colorMenu).getByRole("group", {
+      name: "Project color swatch",
+    });
+    expect(within(colorGroup).getAllByRole("menuitemradio")).toHaveLength(16);
+  });
+});
+
+describe("project color synchronization", () => {
+  it("refreshes durable colors after realtime reconnects", async () => {
+    let rows = [{ projectId: "proj_1", hue: 12 }];
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_color" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({ listProjectColors: () => ({ rows }) }),
+      settings: testSettings(),
+      realtimeConnectionState: "connected",
+    });
+
+    await waitFor(() =>
+      expect(
+        rendered.inspection.rpcCalls.filter(
+          (call) => call.method === "listProjectColors",
+        ),
+      ).toHaveLength(1),
+    );
+    await rendered.behavior.setRealtimeConnectionState("reconnecting");
+    rows = [{ projectId: "proj_1", hue: 204 }];
+    await rendered.behavior.setRealtimeConnectionState("connected");
+
+    await waitFor(() =>
+      expect(
+        rendered.inspection.rpcCalls.filter(
+          (call) => call.method === "listProjectColors",
+        ),
+      ).toHaveLength(2),
+    );
+  });
+
+  it("refreshes after a local project color mutation", async () => {
+    let rows = [{ projectId: "proj_1", hue: 12 }];
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_color", title: "Color me" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listProjectColors: () => ({ rows }),
+        setProjectColor: (input) => {
+          rows = [input as { projectId: string; hue: number }];
+          return { ok: true };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    await waitFor(() =>
+      expect(
+        rendered.inspection.rpcCalls.filter(
+          (call) => call.method === "listProjectColors",
+        ),
+      ).toHaveLength(1),
+    );
+    fireEvent.contextMenu(await screen.findByText("Color me"));
+    const menu = await screen.findByRole("menu", { name: "Thread actions" });
+    const colorTrigger = within(menu).getByRole("menuitem", {
+      name: "bb color",
+    });
+    fireEvent.click(colorTrigger);
+    expect(colorTrigger.getAttribute("data-state")).toBe("open");
+    const colorMenu = await screen.findByRole("menu", {
+      name: "bb color",
+    });
+    fireEvent.click(
+      within(colorMenu).getByRole("menuitemradio", {
+        name: "Set project color 204",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(
+        rendered.inspection.rpcCalls.filter(
+          (call) => call.method === "listProjectColors",
+        ),
+      ).toHaveLength(2),
+    );
+  });
 });
 
 describe("card metadata", () => {

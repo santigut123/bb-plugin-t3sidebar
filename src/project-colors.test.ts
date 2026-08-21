@@ -19,9 +19,10 @@ describe("project colors", () => {
     );
   });
 
-  it("builds sidebar-safe accent strings from a hue", () => {
+  it("derives project stripes from host theme tokens", () => {
     const accent = projectAccentFromHue(200);
-    expect(accent.stripe).toContain("200");
-    expect(accent.label).toContain("200");
+    expect(accent.stripe).toMatch(/var\(--|color-mix\(/);
+    expect(accent.stripe).not.toContain("oklch(");
+    expect(accent).not.toHaveProperty("label");
   });
 });

@@ -128,18 +128,9 @@ export function ThreadCard({
           />
           <div className="pointer-events-none relative z-[1] flex h-5 items-center gap-1.5">
             <span
-              className="min-w-0 flex-1 truncate text-2xs font-medium"
-              style={
-                showProjectAccent
-                  ? { color: projectAccent.label }
-                  : undefined
-              }
+              className="min-w-0 flex-1 truncate text-2xs font-medium text-muted-foreground"
             >
-              <span
-                className={cn(!showProjectAccent && "text-muted-foreground")}
-              >
-                {projectName ?? " "}
-              </span>
+              {projectName ?? " "}
             </span>
             {/* Status at rest, park actions on hover. Only the status yields,
                 so the project name never shifts. */}

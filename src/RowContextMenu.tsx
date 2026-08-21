@@ -67,22 +67,22 @@ export function RowContextMenu({
             </ContextMenu.SubTrigger>
             <ContextMenu.Portal>
               <ContextMenu.SubContent
-                aria-label="Project color"
                 className="z-50 w-52 rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md"
               >
-                <div
+                <ContextMenu.RadioGroup
                   className="grid grid-cols-8 gap-1.5"
-                  role="listbox"
                   aria-label="Project color swatch"
+                  value={hasCustomProjectColor ? String(projectHue) : ""}
+                  onValueChange={(value) => onSetProjectColor(Number(value))}
                 >
                   {PROJECT_COLOR_SWATCH_HUES.map((hue) => {
-                    const selected = projectHue === hue;
+                    const selected =
+                      hasCustomProjectColor && projectHue === hue;
                     return (
-                      <ContextMenu.Item
+                      <ContextMenu.RadioItem
                         key={hue}
+                        value={String(hue)}
                         aria-label={`Set project color ${hue}`}
-                        aria-selected={selected}
-                        onSelect={() => onSetProjectColor(hue)}
                         className={cn(
                           "flex size-5 cursor-pointer items-center justify-center rounded-full outline-none",
                           "data-[highlighted]:ring-2 data-[highlighted]:ring-ring",
@@ -96,10 +96,10 @@ export function RowContextMenu({
                               projectAccentFromHue(hue).stripe,
                           }}
                         />
-                      </ContextMenu.Item>
+                      </ContextMenu.RadioItem>
                     );
                   })}
-                </div>
+                </ContextMenu.RadioGroup>
                 <Separator />
                 <Item
                   onSelect={onResetProjectColor}

@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
+import {
+  useRealtime,
+  useRealtimeConnectionState,
+  useRpc,
+} from "@get-bb/plugin-sdk/app";
 import type { t3sidebarRpcContract } from "./server";
 import { resolveProjectAccent, type ProjectAccent } from "./project-colors";
 
@@ -13,10 +17,12 @@ export interface ProjectColorsApi {
 
 export function useProjectColors(): ProjectColorsApi {
   const rpc = useRpc<typeof t3sidebarRpcContract>();
+  const connectionState = useRealtimeConnectionState();
   const [overrides, setOverrides] = useState<ReadonlyMap<string, number>>(
     () => new Map(),
   );
   const requestSeq = useRef(0);
+  const previousConnectionState = useRef(connectionState);
 
   const refresh = useCallback(async () => {
     const seq = ++requestSeq.current;
@@ -35,18 +41,33 @@ export function useProjectColors(): ProjectColorsApi {
     void refresh();
   });
 
+  useEffect(() => {
+    const previous = previousConnectionState.current;
+    previousConnectionState.current = connectionState;
+    if (connectionState === "connected" && previous !== "connected") {
+      void refresh();
+    }
+  }, [connectionState, refresh]);
+
+  const refreshAfter = useCallback(
+    (write: Promise<unknown>) => {
+      void write.then(() => refresh()).catch(() => undefined);
+    },
+    [refresh],
+  );
+
   return useMemo<ProjectColorsApi>(
     () => ({
       accentFor: (projectId) => resolveProjectAccent(projectId, overrides),
       customHueFor: (projectId) => overrides.get(projectId) ?? null,
       hasCustomColor: (projectId) => overrides.has(projectId),
       setColor: (projectId, hue) => {
-        void rpc.call("setProjectColor", { projectId, hue });
+        refreshAfter(rpc.call("setProjectColor", { projectId, hue }));
       },
       resetColor: (projectId) => {
-        void rpc.call("resetProjectColor", { projectId });
+        refreshAfter(rpc.call("resetProjectColor", { projectId }));
       },
     }),
-    [overrides, rpc],
+    [overrides, refreshAfter, rpc],
   );
 }
