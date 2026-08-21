@@ -124,12 +124,19 @@ describe("ThreadInbox", () => {
     expect(titles[1]).toContain("Older");
   });
 
-  it("shows child threads as staggered sidebar rows", () => {
+  it("shows child threads directly beneath their parent", () => {
     render([
-      thread({ id: "parent", title: "Parent" }),
-      thread({ id: "child", title: "Child", parentThreadId: "parent" }),
+      thread({ id: "parent", title: "Parent", createdAt: 1 }),
+      thread({ id: "child", title: "Child", parentThreadId: "parent", createdAt: 3 }),
+      thread({ id: "other", title: "Unrelated", createdAt: 2 }),
     ]);
-    expect(screen.getByText("Parent")).toBeDefined();
+    expect(
+      screen.getAllByRole("listitem").map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Unrelated"),
+      expect.stringContaining("Parent"),
+      expect.stringContaining("Child"),
+    ]);
     expect(screen.getByText("Child").closest("li")?.className).toContain(
       "ml-4",
     );

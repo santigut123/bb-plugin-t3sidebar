@@ -7,6 +7,7 @@ import {
   partitionPinned,
   searchThreadsByTitle,
   sortByCreatedAtDescending,
+  sortByThreadHierarchy,
   threadDisplayTitle,
   visibleInboxThreads,
 } from "./inbox";
@@ -155,6 +156,26 @@ describe("filtering", () => {
 });
 
 describe("child threads", () => {
+  it("places descendants directly after their parent", () => {
+    expect(
+      sortByThreadHierarchy([
+        thread({ id: "parent", createdAt: 1 }),
+        thread({ id: "child", parentThreadId: "parent", createdAt: 3 }),
+        thread({ id: "other", createdAt: 2 }),
+        thread({ id: "grandchild", parentThreadId: "child", createdAt: 4 }),
+      ]).map((item) => item.id),
+    ).toEqual(["other", "parent", "child", "grandchild"]);
+  });
+
+  it("keeps an orphan in the root creation order", () => {
+    expect(
+      sortByThreadHierarchy([
+        thread({ id: "older", createdAt: 1 }),
+        thread({ id: "orphan", parentThreadId: "missing", createdAt: 2 }),
+      ]).map((item) => item.id),
+    ).toEqual(["orphan", "older"]);
+  });
+
   it("lists a thread's children oldest first", () => {
     const children = childrenOf(
       [

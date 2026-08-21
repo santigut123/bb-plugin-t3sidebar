@@ -4,8 +4,8 @@
 
 ### Changed
 
-- Child threads now remain visible as staggered sidebar rows while retaining
-  the parent and children header shortcuts.
+- Child threads now remain visible directly beneath their parent as staggered
+  sidebar rows while retaining the parent and children header shortcuts.
 - Restored the previous status presentation: compact Failed, Input, Done,
   Monitoring, and activity indicators, including the static dashed Working
   circle.

@@ -39,13 +39,14 @@ import {
   partitionPinned,
   searchThreadsByTitle,
   sortByCreatedAtDescending,
+  sortByThreadHierarchy,
   visibleInboxThreads,
 } from "./inbox";
 
 const ALL_PROJECTS = "__all__";
 
 /**
- * The sidebar's scrolling list: one flat, statically ordered stack of cards.
+ * The sidebar's scrolling list: stable root cards with descendants beneath.
  *
  * The host owns the New-thread button and the search field above it, so this
  * ships neither. It filters by the `searchQuery` prop and keeps only the one
@@ -118,8 +119,8 @@ export function ThreadInbox({
     }
     const split = partitionPinned(active);
     return {
-      pinned: sortByCreatedAtDescending(split.pinned),
-      inbox: sortByCreatedAtDescending(split.inbox),
+      pinned: sortByThreadHierarchy(split.pinned),
+      inbox: sortByThreadHierarchy(split.inbox),
       // Soonest wake first: "what comes back next" is the shelf's question.
       snoozed: [...onSnoozeShelf].sort(
         (left, right) =>
@@ -142,6 +143,8 @@ export function ThreadInbox({
     [inbox, pinned],
   );
   const turnStarts = useTurnStarts(timedThreadIds);
+  const pinnedIds = new Set(pinned.map((thread) => thread.id));
+  const inboxIds = new Set(inbox.map((thread) => thread.id));
 
   const scopeLabel =
     scope === ALL_PROJECTS
@@ -150,7 +153,10 @@ export function ThreadInbox({
   const showProjectAccent =
     projectColorStripes && scope === ALL_PROJECTS;
 
-  const threadCardProps = (thread: PluginSidebarThread) => ({
+  const threadCardProps = (
+    thread: PluginSidebarThread,
+    visibleIds: ReadonlySet<string>,
+  ) => ({
     thread,
     projectName: projectNameById.get(thread.projectId) ?? null,
     projectAccent: projectColors.accentFor(thread.projectId),
@@ -165,7 +171,8 @@ export function ThreadInbox({
     turnStartedAt: turnStarts.get(thread.id) ?? null,
     unreadTitleWeight,
     isActive: thread.id === activeThreadId,
-    isChild: thread.parentThreadId !== null,
+    isChild:
+      thread.parentThreadId !== null && visibleIds.has(thread.parentThreadId),
     canPark: lifecycle.canPark(thread),
     onNavigate,
     onSettle: () => lifecycle.settle(thread.id),
@@ -225,7 +232,10 @@ export function ThreadInbox({
             {pinned.length > 0 ? (
               <Shelf label="Pinned" showCardDividers={showCardDividers}>
                 {pinned.map((thread) => (
-                  <ThreadCard key={thread.id} {...threadCardProps(thread)} />
+                  <ThreadCard
+                    key={thread.id}
+                    {...threadCardProps(thread, pinnedIds)}
+                  />
                 ))}
               </Shelf>
             ) : null}
@@ -235,7 +245,10 @@ export function ThreadInbox({
                 showCardDividers={showCardDividers}
               >
                 {inbox.map((thread) => (
-                  <ThreadCard key={thread.id} {...threadCardProps(thread)} />
+                  <ThreadCard
+                    key={thread.id}
+                    {...threadCardProps(thread, inboxIds)}
+                  />
                 ))}
               </Shelf>
             ) : null}

@@ -1,9 +1,9 @@
 // bb-plugin-t3sidebar — an inbox-style replacement for bb's sidebar thread
 // list, and the reference example for `app.slots.experimental_threadList`.
 //
-// The idea it is built around: the list NEVER re-orders itself. Threads sort
-// by creation time, newest first, and hold that place. Status is carried by
-// each card, not by position, so the sidebar only moves when you act.
+// The idea it is built around: root threads never re-order themselves. Roots
+// sort by creation time, newest first, while descendants stay directly beneath
+// their parent. Status is carried by each card, not by position.
 import { definePluginApp } from "@get-bb/plugin-sdk/app";
 import { ThreadInbox } from "./src/ThreadInbox";
 import { ParentChip } from "./src/ParentChip";
@@ -14,7 +14,7 @@ export default definePluginApp((app) => {
   app.slots.experimental_threadList({
     id: "inbox",
     title: "T3 Sidebar",
-    description: "One flat list of cards, newest first, that never re-orders.",
+    description: "A stable inbox with child threads beneath their parent.",
     component: ThreadInbox,
   });
 

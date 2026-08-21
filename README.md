@@ -20,10 +20,10 @@ scope picker.
 
 ## The idea
 
-The list never re-orders itself. Threads sort by creation time, newest first,
-and hold that place until you park them. Status lives inside each card instead
-of in its position, so the sidebar only moves when you act — no row slides
-away under your cursor because an agent finished something.
+Root threads never re-order themselves. They sort by creation time, newest
+first, while descendants stay directly beneath their parent until parked.
+Status lives inside each card instead of in its position, so no row slides away
+under your cursor because an agent finished something.
 
 Three shelves:
 
@@ -47,8 +47,9 @@ Three shelves:
 
 ## Child threads stay visible
 
-Child threads remain in the newest-first list as staggered rows with a subtle
-left guide. Two chips in the thread header provide quicker navigation:
+Child threads sit directly beneath their parent as staggered rows with a subtle
+left guide. Orphans stay in the root creation order. Two chips in the thread
+header provide quicker navigation:
 
 - On a parent: a chip with one coloured disc per child. It opens the list of
   children.
@@ -59,8 +60,8 @@ then down. A child that has children of its own shows both. Each disc takes
 its colour from the thread id, so the same thread keeps one colour in the list
 and in both chips.
 
-An orphan — a child whose parent is deleted — remains staggered in the list,
-and its header shows no parent chip.
+An orphan — a child whose parent is deleted or filtered out — remains a normal
+root row, and its header shows no parent chip.
 
 ## What it demonstrates
 

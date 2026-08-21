@@ -17,6 +17,55 @@ export function sortByCreatedAtDescending<
   );
 }
 
+/** Root threads stay newest-first; each descendant follows its parent. */
+export function sortByThreadHierarchy<
+  T extends {
+    readonly id: string;
+    readonly parentThreadId: string | null;
+    readonly createdAt: number;
+  },
+>(threads: readonly T[]): T[] {
+  const ids = new Set(threads.map((thread) => thread.id));
+  const children = new Map<string, T[]>();
+  const roots: T[] = [];
+
+  for (const thread of threads) {
+    if (
+      thread.parentThreadId &&
+      thread.parentThreadId !== thread.id &&
+      ids.has(thread.parentThreadId)
+    ) {
+      const siblings = children.get(thread.parentThreadId) ?? [];
+      siblings.push(thread);
+      children.set(thread.parentThreadId, siblings);
+    } else {
+      roots.push(thread);
+    }
+  }
+
+  for (const [parentId, siblings] of children) {
+    children.set(parentId, sortByCreatedAtDescending(siblings));
+  }
+
+  const result: T[] = [];
+  const visited = new Set<string>();
+  const appendFamily = (root: T) => {
+    const stack = [root];
+    while (stack.length > 0) {
+      const thread = stack.pop()!;
+      if (visited.has(thread.id)) continue;
+      visited.add(thread.id);
+      result.push(thread);
+      stack.push(...[...(children.get(thread.id) ?? [])].reverse());
+    }
+  };
+
+  sortByCreatedAtDescending(roots).forEach(appendFamily);
+  // Keep malformed cycles reachable rather than silently dropping rows.
+  sortByCreatedAtDescending(threads).forEach(appendFamily);
+  return result;
+}
+
 export function threadDisplayTitle(thread: PluginSidebarThread): string {
   const title = thread.title?.trim();
   if (title) return title;
