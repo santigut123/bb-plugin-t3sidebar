@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
+import {
+  createFakePluginHost,
+  makeThreadResponse,
+} from "@get-bb/plugin-sdk/testing";
 import plugin, { TURN_STARTS_CHANNEL } from "./server";
 
 function turnStartedEvent(threadId: string, createdAt: number) {
@@ -28,6 +31,50 @@ function turnCompletedEvent(threadId: string, createdAt: number) {
     },
   };
 }
+
+describe("lifecycle RPC", () => {
+  it("settles the requested thread and its full parent chain", async () => {
+    const parentById: Record<string, string | null> = {
+      child: "parent",
+      parent: "grandparent",
+      grandparent: null,
+    };
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3sidebar",
+      sdk: {
+        subscribe: () => () => {},
+        threads: {
+          get: async ({ threadId }) =>
+            makeThreadResponse({
+              id: threadId,
+              parentThreadId: parentById[threadId] ?? null,
+            }),
+          events: { list: async () => [] },
+        },
+      },
+    });
+    await plugin(bb);
+
+    await harness.behavior.callRpc("settle", { threadId: "child" });
+    const result = await harness.behavior.callRpc("listLifecycle", {});
+
+    const rows = result as { rows: Array<{ threadId: string }> };
+    expect(rows.rows.map((row) => row.threadId).sort()).toEqual([
+      "child",
+      "grandparent",
+      "parent",
+    ]);
+    expect(
+      harness.inspection.sdk.callsTo("threads.get").map(([args]) => args),
+    ).toEqual([
+      { threadId: "child" },
+      { threadId: "parent" },
+      { threadId: "grandparent" },
+    ]);
+
+    await harness.lifecycle.dispose();
+  });
+});
 
 describe("turn start RPC", () => {
   it("returns the latest turn start for each unique requested thread", async () => {

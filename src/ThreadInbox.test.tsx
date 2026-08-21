@@ -360,35 +360,24 @@ describe("parking threads", () => {
     expect(screen.getByLabelText("Snooze until tomorrow")).toBeDefined();
   });
 
-  it("settles a thread and all of its parents", async () => {
-    const settled: string[] = [];
+  it("requests a settle when the user clicks Settle", async () => {
+    let settled: string | null = null;
     renderSlot(inbox, listProps, {
       sidebarThreads: {
         status: "ready",
-        threads: [
-          thread({ id: "grandparent", title: "Grandparent" }),
-          thread({
-            id: "parent",
-            title: "Parent",
-            parentThreadId: "grandparent",
-          }),
-          thread({ id: "child", title: "Child", parentThreadId: "parent" }),
-        ],
+        threads: [thread({ id: "thr_park", title: "Quiet" })],
         projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
       },
       rpc: testRpc({
         settle: (input) => {
-          settled.push((input as { threadId: string }).threadId);
+          settled = (input as { threadId: string }).threadId;
           return { ok: true };
         },
       }),
       settings: testSettings(),
     });
-    const childRow = (await screen.findByText("Child")).closest("li")!;
-    fireEvent.click(within(childRow).getByLabelText("Settle thread"));
-    await waitFor(() =>
-      expect(settled).toEqual(["child", "parent", "grandparent"]),
-    );
+    fireEvent.click(await screen.findByLabelText("Settle thread"));
+    await waitFor(() => expect(settled).toBe("thr_park"));
   });
 
   it("shows the wake countdown on a snoozed row", async () => {

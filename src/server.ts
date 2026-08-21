@@ -235,14 +235,30 @@ export default function plugin(bb: BbPluginApi) {
       return { rows: readAll() };
     },
     async settle({ threadId }) {
+      const threadIds: string[] = [];
+      const seen = new Set<string>();
+      for (
+        let id: string | null = threadId;
+        id !== null && !seen.has(id);
+      ) {
+        seen.add(id);
+        threadIds.push(id);
+        const thread: { parentThreadId: string | null } | null =
+          await bb.sdk.threads.get({ threadId: id }).catch(() => null);
+        id = thread?.parentThreadId ?? null;
+      }
+
       // Settling clears any snooze: they are two answers to the same
       // question, and holding both would make the shelf order ambiguous.
-      write({
-        threadId,
-        settledAt: Date.now(),
-        snoozedUntil: null,
-        snoozedAt: null,
-      });
+      const settledAt = Date.now();
+      for (const id of threadIds) {
+        write({
+          threadId: id,
+          settledAt,
+          snoozedUntil: null,
+          snoozedAt: null,
+        });
+      }
       return { ok: true };
     },
     async unsettle({ threadId }) {
