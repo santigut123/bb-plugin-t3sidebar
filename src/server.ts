@@ -235,14 +235,38 @@ export default function plugin(bb: BbPluginApi) {
       return { rows: readAll() };
     },
     async settle({ threadId }) {
+      const threadIds = [threadId];
+      const seen = new Set(threadIds);
+      for (let index = 0; index < threadIds.length; index += 1) {
+        let offset = 0;
+        while (true) {
+          const threads = await bb.sdk.threads.list({
+            parentThreadId: threadIds[index],
+            archived: false,
+            limit: 100,
+            offset,
+          });
+          for (const child of threads) {
+            if (seen.has(child.id)) continue;
+            seen.add(child.id);
+            threadIds.push(child.id);
+          }
+          if (threads.length < 100) break;
+          offset += threads.length;
+        }
+      }
+
       // Settling clears any snooze: they are two answers to the same
       // question, and holding both would make the shelf order ambiguous.
-      write({
-        threadId,
-        settledAt: Date.now(),
-        snoozedUntil: null,
-        snoozedAt: null,
-      });
+      const settledAt = Date.now();
+      for (const id of threadIds) {
+        write({
+          threadId: id,
+          settledAt,
+          snoozedUntil: null,
+          snoozedAt: null,
+        });
+      }
       return { ok: true };
     },
     async unsettle({ threadId }) {

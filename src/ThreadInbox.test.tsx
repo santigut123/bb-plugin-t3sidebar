@@ -360,7 +360,7 @@ describe("parking threads", () => {
     expect(screen.getByLabelText("Snooze until tomorrow")).toBeDefined();
   });
 
-  it("settles a thread when the user clicks Settle", async () => {
+  it("requests a settle when the user clicks Settle", async () => {
     let settled: string | null = null;
     renderSlot(inbox, listProps, {
       sidebarThreads: {
