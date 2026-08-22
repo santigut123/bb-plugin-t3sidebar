@@ -33,45 +33,38 @@ function turnCompletedEvent(threadId: string, createdAt: number) {
 }
 
 describe("lifecycle RPC", () => {
-  it("settles the requested thread and its full parent chain", async () => {
-    const parentById: Record<string, string | null> = {
-      child: "parent",
-      parent: "grandparent",
-      grandparent: null,
+  it("settles the requested thread and its full child subtree", async () => {
+    const childrenByParent: Record<string, string[]> = {
+      parent: ["child-a", "child-b"],
+      "child-a": ["grandchild"],
     };
     const { bb, harness } = createFakePluginHost({
       pluginId: "t3sidebar",
       sdk: {
         subscribe: () => () => {},
         threads: {
-          get: async ({ threadId }) =>
-            makeThreadResponse({
-              id: threadId,
-              parentThreadId: parentById[threadId] ?? null,
-            }),
+          list: async (args) => {
+            const parentThreadId = args?.parentThreadId ?? null;
+            return (childrenByParent[parentThreadId ?? ""] ?? []).map((id) =>
+              makeThreadResponse({ id, parentThreadId }),
+            );
+          },
           events: { list: async () => [] },
         },
       },
     });
     await plugin(bb);
 
-    await harness.behavior.callRpc("settle", { threadId: "child" });
+    await harness.behavior.callRpc("settle", { threadId: "parent" });
     const result = await harness.behavior.callRpc("listLifecycle", {});
 
     const rows = result as { rows: Array<{ threadId: string }> };
     expect(rows.rows.map((row) => row.threadId).sort()).toEqual([
-      "child",
-      "grandparent",
+      "child-a",
+      "child-b",
+      "grandchild",
       "parent",
     ]);
-    expect(
-      harness.inspection.sdk.callsTo("threads.get").map(([args]) => args),
-    ).toEqual([
-      { threadId: "child" },
-      { threadId: "parent" },
-      { threadId: "grandparent" },
-    ]);
-
     await harness.lifecycle.dispose();
   });
 });

@@ -235,17 +235,25 @@ export default function plugin(bb: BbPluginApi) {
       return { rows: readAll() };
     },
     async settle({ threadId }) {
-      const threadIds: string[] = [];
-      const seen = new Set<string>();
-      for (
-        let id: string | null = threadId;
-        id !== null && !seen.has(id);
-      ) {
-        seen.add(id);
-        threadIds.push(id);
-        const thread: { parentThreadId: string | null } | null =
-          await bb.sdk.threads.get({ threadId: id }).catch(() => null);
-        id = thread?.parentThreadId ?? null;
+      const threadIds = [threadId];
+      const seen = new Set(threadIds);
+      for (let index = 0; index < threadIds.length; index += 1) {
+        let offset = 0;
+        while (true) {
+          const threads = await bb.sdk.threads.list({
+            parentThreadId: threadIds[index],
+            archived: false,
+            limit: 100,
+            offset,
+          });
+          for (const child of threads) {
+            if (seen.has(child.id)) continue;
+            seen.add(child.id);
+            threadIds.push(child.id);
+          }
+          if (threads.length < 100) break;
+          offset += threads.length;
+        }
       }
 
       // Settling clears any snooze: they are two answers to the same
