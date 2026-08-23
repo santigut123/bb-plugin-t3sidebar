@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- The Settled shelf now has a right-click action to archive all settled threads.
+
 ### Changed
 
 - Settling a parent thread now settles its full child subtree with it.
