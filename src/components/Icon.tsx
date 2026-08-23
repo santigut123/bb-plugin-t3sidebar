@@ -4,7 +4,6 @@ import {
   ArrowLeft01Icon,
   ArrowTurnBackwardIcon,
   ArrowUp01Icon,
-  ArchiveIcon,
   CancelCircleIcon,
   CheckListIcon,
   CircleCheckIcon,
@@ -23,7 +22,6 @@ import {
 import { cn } from "../lib/utils";
 
 const ICON_MAP = {
-  Archive: ArchiveIcon,
   ArrowTurnBackward: ArrowTurnBackwardIcon,
   Check: Tick02Icon,
   ChevronDown: ArrowDown01Icon,

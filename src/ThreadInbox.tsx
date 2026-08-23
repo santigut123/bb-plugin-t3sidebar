@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import * as ContextMenu from "@radix-ui/react-context-menu";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
@@ -377,42 +378,51 @@ function ParkedShelf({
 }) {
   if (threads.length === 0) return null;
   const now = Date.now();
+  const header = (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={expanded}
+      aria-label={`${expanded ? "Collapse" : "Expand"} ${label.toLowerCase()} threads`}
+      className="mt-3 flex w-full items-center gap-2 px-2.5 pb-1 text-left"
+    >
+      <span className="text-2xs font-medium text-muted-foreground/70">
+        {expanded ? label : `${label} (${threads.length})`}
+      </span>
+      <span className="h-px flex-1 bg-sidebar-border" />
+      <span className={TRAILING_GLYPH_BOX_CLASS}>
+        <Icon
+          name="ChevronDown"
+          className={cn(
+            "size-3 text-muted-foreground/70 transition-transform",
+            expanded && "rotate-180",
+          )}
+        />
+      </span>
+    </button>
+  );
   return (
     <section aria-label={label}>
-      <div className="mt-3 flex items-center px-2.5 pb-1">
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={expanded}
-          aria-label={`${expanded ? "Collapse" : "Expand"} ${label.toLowerCase()} threads`}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
-        >
-          <span className="text-2xs font-medium text-muted-foreground/70">
-            {expanded ? label : `${label} (${threads.length})`}
-          </span>
-          <span className="h-px flex-1 bg-sidebar-border" />
-          <span className={TRAILING_GLYPH_BOX_CLASS}>
-            <Icon
-              name="ChevronDown"
-              className={cn(
-                "size-3 text-muted-foreground/70 transition-transform",
-                expanded && "rotate-180",
-              )}
-            />
-          </span>
-        </button>
-        {onArchiveAll ? (
-          <button
-            type="button"
-            onClick={onArchiveAll}
-            aria-label="Archive all settled threads"
-            title="Archive all settled threads"
-            className="ml-1 rounded p-0.5 text-muted-foreground/70 hover:bg-sidebar-accent hover:text-foreground"
-          >
-            <Icon name="Archive" className="size-3.5" />
-          </button>
-        ) : null}
-      </div>
+      {onArchiveAll ? (
+        <ContextMenu.Root>
+          <ContextMenu.Trigger asChild>{header}</ContextMenu.Trigger>
+          <ContextMenu.Portal>
+            <ContextMenu.Content
+              aria-label="Settled actions"
+              className="z-50 min-w-36 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
+            >
+              <ContextMenu.Item
+                onSelect={onArchiveAll}
+                className="cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
+              >
+                Archive all
+              </ContextMenu.Item>
+            </ContextMenu.Content>
+          </ContextMenu.Portal>
+        </ContextMenu.Root>
+      ) : (
+        header
+      )}
       {expanded ? (
         <ul
           className={cn(

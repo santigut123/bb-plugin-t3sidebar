@@ -345,11 +345,12 @@ describe("parking threads", () => {
       settings: testSettings(),
     });
 
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Archive all settled threads",
-      }),
+    const shelf = await screen.findByRole("region", { name: "Settled" });
+    fireEvent.contextMenu(
+      within(shelf).getByRole("button", { name: "Expand settled threads" }),
     );
+    const menu = await screen.findByRole("menu", { name: "Settled actions" });
+    fireEvent.click(within(menu).getByText("Archive all"));
 
     expect(rendered.sidebarActionCalls).toEqual(
       expect.arrayContaining([

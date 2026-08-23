@@ -4,7 +4,7 @@
 
 ### Added
 
-- The Settled shelf now has a button to archive all settled threads.
+- The Settled shelf now has a right-click action to archive all settled threads.
 
 ### Changed
 
