@@ -299,6 +299,16 @@ export function ThreadInbox({
               threads={settled}
               expanded={showSettled}
               onToggle={() => setShowSettled((open) => !open)}
+              onArchiveAll={() => {
+                const settledIds = new Set(settled.map((thread) => thread.id));
+                settled
+                  .filter(
+                    (thread) =>
+                      !thread.parentThreadId ||
+                      !settledIds.has(thread.parentThreadId),
+                  )
+                  .forEach((thread) => actions.archive(thread.id));
+              }}
               shelf="settled"
               showCardDividers={showCardDividers}
               animateStatusIcons={animateStatusIcons}
@@ -341,6 +351,7 @@ function ParkedShelf({
   threads,
   expanded,
   onToggle,
+  onArchiveAll,
   shelf,
   showCardDividers,
   animateStatusIcons,
@@ -354,6 +365,7 @@ function ParkedShelf({
   threads: readonly PluginSidebarThread[];
   expanded: boolean;
   onToggle: () => void;
+  onArchiveAll?: () => void;
   shelf: "snoozed" | "settled";
   showCardDividers: boolean;
   animateStatusIcons: boolean;
@@ -367,28 +379,40 @@ function ParkedShelf({
   const now = Date.now();
   return (
     <section aria-label={label}>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        // Padded like a card, so the chevron ends on the same right edge as
-        // every row's status and provider glyph.
-        className="mt-3 flex w-full items-center gap-2 px-2.5 pb-1 text-left"
-      >
-        <span className="text-2xs font-medium text-muted-foreground/70">
-          {expanded ? label : `${label} (${threads.length})`}
-        </span>
-        <span className="h-px flex-1 bg-sidebar-border" />
-        <span className={TRAILING_GLYPH_BOX_CLASS}>
-          <Icon
-            name="ChevronDown"
-            className={cn(
-              "size-3 text-muted-foreground/70 transition-transform",
-              expanded && "rotate-180",
-            )}
-          />
-        </span>
-      </button>
+      <div className="mt-3 flex items-center px-2.5 pb-1">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-label={`${expanded ? "Collapse" : "Expand"} ${label.toLowerCase()} threads`}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          <span className="text-2xs font-medium text-muted-foreground/70">
+            {expanded ? label : `${label} (${threads.length})`}
+          </span>
+          <span className="h-px flex-1 bg-sidebar-border" />
+          <span className={TRAILING_GLYPH_BOX_CLASS}>
+            <Icon
+              name="ChevronDown"
+              className={cn(
+                "size-3 text-muted-foreground/70 transition-transform",
+                expanded && "rotate-180",
+              )}
+            />
+          </span>
+        </button>
+        {onArchiveAll ? (
+          <button
+            type="button"
+            onClick={onArchiveAll}
+            aria-label="Archive all settled threads"
+            title="Archive all settled threads"
+            className="ml-1 rounded p-0.5 text-muted-foreground/70 hover:bg-sidebar-accent hover:text-foreground"
+          >
+            <Icon name="Archive" className="size-3.5" />
+          </button>
+        ) : null}
+      </div>
       {expanded ? (
         <ul
           className={cn(

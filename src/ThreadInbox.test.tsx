@@ -308,8 +308,55 @@ describe("parking threads", () => {
     expect(within(shelf).getByText(/Settled \(1\)/)).toBeDefined();
     // Collapsed by default: parked work is out of the way, never gone.
     expect(screen.queryByText("Finished work")).toBeNull();
-    fireEvent.click(within(shelf).getByRole("button"));
+    fireEvent.click(
+      within(shelf).getByRole("button", { name: "Expand settled threads" }),
+    );
     expect(within(shelf).getByText("Finished work")).toBeDefined();
+  });
+
+  it("archives every settled thread from the shelf label", async () => {
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "thr_done_1", title: "First finished thread" }),
+          thread({ id: "thr_done_2", title: "Second finished thread" }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listLifecycle: () => ({
+          rows: [
+            {
+              threadId: "thr_done_1",
+              settledAt: 200,
+              snoozedUntil: null,
+              snoozedAt: null,
+            },
+            {
+              threadId: "thr_done_2",
+              settledAt: 200,
+              snoozedUntil: null,
+              snoozedAt: null,
+            },
+          ],
+        }),
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Archive all settled threads",
+      }),
+    );
+
+    expect(rendered.sidebarActionCalls).toEqual(
+      expect.arrayContaining([
+        { method: "archive", threadId: "thr_done_1" },
+        { method: "archive", threadId: "thr_done_2" },
+      ]),
+    );
   });
 
   it("keeps a working thread out of the shelves and offers no park action", async () => {
