@@ -3,7 +3,7 @@ import {
   createFakePluginHost,
   makeThreadResponse,
 } from "@get-bb/plugin-sdk/testing";
-import plugin, { TURN_STARTS_CHANNEL } from "./server";
+import plugin, { TURN_STARTS_CHANNEL, WORKSPACES_CHANNEL } from "./server";
 
 function turnStartedEvent(threadId: string, createdAt: number) {
   return {
@@ -65,6 +65,69 @@ describe("lifecycle RPC", () => {
       "grandchild",
       "parent",
     ]);
+    await harness.lifecycle.dispose();
+  });
+});
+
+describe("workspace RPC", () => {
+  it("creates, updates, lists, and deletes named project groups", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3sidebar",
+      sdk: {
+        subscribe: () => () => {},
+        threads: { events: { list: async () => [] } },
+      },
+    });
+    await plugin(bb);
+
+    const created = (await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "  Landing page  ",
+      projectIds: ["proj_marketing", "proj_pricing", "proj_marketing"],
+    })) as {
+      workspace: { id: string; name: string; projectIds: string[] };
+    };
+
+    expect(created.workspace).toEqual({
+      id: expect.stringMatching(/^workspace_/),
+      name: "Landing page",
+      projectIds: ["proj_marketing", "proj_pricing"],
+    });
+    expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
+      workspaces: [created.workspace],
+    });
+
+    const updated = await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: created.workspace.id,
+      name: "Launch",
+      projectIds: ["proj_pricing"],
+    });
+    expect(updated).toEqual({
+      workspace: {
+        id: created.workspace.id,
+        name: "Launch",
+        projectIds: ["proj_pricing"],
+      },
+    });
+
+    expect(harness.inspection.realtimeSignals).toEqual([
+      {
+        channel: WORKSPACES_CHANNEL,
+        payload: { workspaceId: created.workspace.id },
+      },
+      {
+        channel: WORKSPACES_CHANNEL,
+        payload: { workspaceId: created.workspace.id },
+      },
+    ]);
+
+    await harness.behavior.callRpc("deleteWorkspace", {
+      workspaceId: created.workspace.id,
+    });
+    expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
+      workspaces: [],
+    });
+
     await harness.lifecycle.dispose();
   });
 });

@@ -18,6 +18,12 @@ const migrations = [
      project_id TEXT PRIMARY KEY,
      hue        INTEGER NOT NULL
    )`,
+  `CREATE TABLE IF NOT EXISTS workspaces (
+     id          TEXT PRIMARY KEY,
+     name        TEXT NOT NULL,
+     project_ids TEXT NOT NULL,
+     position    INTEGER NOT NULL
+   )`,
 ];
 
 export interface StoredLifecycleRow {
@@ -44,9 +50,29 @@ export interface StoredProjectColorRow {
   hue: number;
 }
 
+export interface StoredWorkspace {
+  id: string;
+  name: string;
+  projectIds: string[];
+}
+
+interface WorkspaceDbRow {
+  id: string;
+  name: string;
+  project_ids: string;
+}
+
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
 const projectIdSchema = z.object({ projectId: z.string().trim().min(1) });
 const hueSchema = z.number().int().min(0).max(359);
+const workspaceIdSchema = z.object({
+  workspaceId: z.string().trim().min(1),
+});
+const workspaceSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  projectIds: z.array(z.string()),
+});
 
 export const t3sidebarRpcContract = defineRpcContract({
   listTurnStarts: {
@@ -108,12 +134,29 @@ export const t3sidebarRpcContract = defineRpcContract({
     input: projectIdSchema,
     output: z.object({ ok: z.boolean() }),
   },
+  listWorkspaces: {
+    input: z.object({}),
+    output: z.object({ workspaces: z.array(workspaceSchema) }),
+  },
+  saveWorkspace: {
+    input: z.object({
+      workspaceId: z.string().trim().min(1).nullable(),
+      name: z.string().trim().min(1).max(64),
+      projectIds: z.array(z.string().trim().min(1)).min(1).max(100),
+    }),
+    output: z.object({ workspace: workspaceSchema }),
+  },
+  deleteWorkspace: {
+    input: workspaceIdSchema,
+    output: z.object({ ok: z.boolean() }),
+  },
 });
 
 /** Channel the frontend re-reads on. */
 export const LIFECYCLE_CHANNEL = "lifecycle";
 export const PROJECT_COLORS_CHANNEL = "project-colors";
 export const TURN_STARTS_CHANNEL = "turn-starts";
+export const WORKSPACES_CHANNEL = "workspaces";
 
 export const t3sidebarSettings = {
   cardDividers: {
@@ -207,6 +250,25 @@ export default function plugin(bb: BbPluginApi) {
 
   const publishProjectColors = (projectId: string): void => {
     bb.realtime.publish(PROJECT_COLORS_CHANNEL, { projectId });
+  };
+
+  const readWorkspaces = (): StoredWorkspace[] =>
+    (
+      db
+        .prepare(
+          `SELECT id, name, project_ids
+             FROM workspaces
+            ORDER BY position, id`,
+        )
+        .all() as WorkspaceDbRow[]
+    ).map((row) => ({
+      id: row.id,
+      name: row.name,
+      projectIds: JSON.parse(row.project_ids) as string[],
+    }));
+
+  const publishWorkspace = (workspaceId: string): void => {
+    bb.realtime.publish(WORKSPACES_CHANNEL, { workspaceId });
   };
 
   const activeTurnStartedAt = async (
@@ -304,6 +366,51 @@ export default function plugin(bb: BbPluginApi) {
         projectId,
       );
       publishProjectColors(projectId);
+      return { ok: true };
+    },
+    async listWorkspaces() {
+      return { workspaces: readWorkspaces() };
+    },
+    async saveWorkspace({ workspaceId, name, projectIds }) {
+      const workspace: StoredWorkspace = {
+        id: workspaceId ?? `workspace_${crypto.randomUUID()}`,
+        name: name.trim(),
+        projectIds: [...new Set(projectIds)],
+      };
+      if (workspaceId === null) {
+        db.prepare(
+          `INSERT INTO workspaces (id, name, project_ids, position)
+           VALUES (
+             ?,
+             ?,
+             ?,
+             COALESCE((SELECT MAX(position) + 1 FROM workspaces), 0)
+           )`,
+        ).run(
+          workspace.id,
+          workspace.name,
+          JSON.stringify(workspace.projectIds),
+        );
+      } else {
+        const result = db
+          .prepare(
+            `UPDATE workspaces
+                SET name = ?, project_ids = ?
+              WHERE id = ?`,
+          )
+          .run(
+            workspace.name,
+            JSON.stringify(workspace.projectIds),
+            workspace.id,
+          );
+        if (result.changes === 0) throw new Error("Workspace not found.");
+      }
+      publishWorkspace(workspace.id);
+      return { workspace };
+    },
+    async deleteWorkspace({ workspaceId }) {
+      db.prepare(`DELETE FROM workspaces WHERE id = ?`).run(workspaceId);
+      publishWorkspace(workspaceId);
       return { ok: true };
     },
   });
