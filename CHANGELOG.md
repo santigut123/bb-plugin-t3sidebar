@@ -4,6 +4,8 @@
 
 ### Added
 
+- Always-visible named workspace tabs for grouping and filtering multiple
+  projects, with create, edit, and delete controls.
 - The Settled shelf now has a right-click action to archive all settled threads.
 
 ### Changed

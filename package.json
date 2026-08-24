@@ -2,7 +2,7 @@
   "name": "bb-plugin-t3sidebar",
   "version": "0.2.0",
   "type": "module",
-  "description": "An inbox-style sidebar: one flat list of cards that never re-orders.",
+  "description": "A workspace-based inbox with stable thread ordering.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -15,7 +15,7 @@
   },
   "bb": {
     "name": "T3 Sidebar",
-    "description": "An inbox-style sidebar: one flat list of cards that never re-orders.",
+    "description": "A workspace-based inbox with stable thread ordering.",
     "branding": {
       "icon": "PanelLeft"
     },

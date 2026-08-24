@@ -15,8 +15,16 @@ default, and comes back the moment you switch away or disable this plugin.
 
 The plugin replaces the scrolling list only. bb's New-thread button, search
 field, plugin nav rows, and footer stay exactly where they are — this list
-filters by the host's search and adds just one control of its own, a project
-scope picker.
+filters by the host's search and adds workspace tabs plus a project scope
+picker.
+
+## Workspaces
+
+Workspaces sit in a compact, always-visible row at the top of the list. Each
+one has a name and groups one or more bb projects, so selecting a workspace
+shows only the threads for that area of work. Use **+** to create one, then
+right-click its tab to rename it, change its projects, or delete it. Workspace
+names and membership are stored in the plugin's SQLite database.
 
 ## The idea
 
@@ -75,7 +83,7 @@ root row, and its header shows no parent chip.
 | `experimental_useSidebarThreadSplit`               | dragging a card out to a split pane                                                         |
 | `experimental_useSidebarThreadPullRequest`         | the `#412` badge, coloured by bb's attention state                                          |
 | `@radix-ui/react-context-menu` (shimmed)           | this plugin's own right-click menu, built on the action hook                                |
-| `bb.storage.database()` + `bb.rpc` + `bb.realtime` | the settled/snoozed store                                                                   |
+| `bb.storage.database()` + `bb.rpc` + `bb.realtime` | settled/snoozed state and named project workspaces                                          |
 
 The plugin API ships **no components**. Status glyphs and the right-click menu
 are both this plugin's own: `indicator` arrives as data, and every menu item is

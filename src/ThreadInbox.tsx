@@ -53,8 +53,8 @@ const ALL_PROJECTS = "__all__";
  * The sidebar's scrolling list: stable root cards with descendants beneath.
  *
  * The host owns the New-thread button and the search field above it, so this
- * ships neither. It filters by the `searchQuery` prop and keeps only the one
- * control the host has no equivalent for: the project scope picker.
+ * ships neither. It filters by the `searchQuery` prop and adds the controls
+ * the host has no equivalent for: workspaces and the project scope picker.
  */
 export function ThreadInbox({
   activeThreadId,
@@ -252,8 +252,8 @@ export function ThreadInbox({
         projects={projects}
         workspaces={workspaces}
       />
-      {/* The one control the host has no equivalent for. Everything else in
-          the chrome above — New thread, search — is bb's and stays bb's. */}
+      {/* Everything else in the chrome above — New thread, search — is bb's
+          and stays bb's. */}
       <div className="flex shrink-0 items-center gap-1 px-2 pb-1">
         <Select value={effectiveScope} onValueChange={setScope}>
           {/* Ghost trigger: no border, no filled track — it reads as a label
