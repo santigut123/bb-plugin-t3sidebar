@@ -352,6 +352,65 @@ describe("ThreadInbox", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("renames a workspace and changes its project membership", async () => {
+    let workspaces = [
+      {
+        id: "workspace_landing",
+        name: "Landing",
+        projectIds: ["proj_1", "proj_2"],
+      },
+    ];
+    let saved:
+      | { workspaceId: string | null; name: string; projectIds: string[] }
+      | undefined;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread()],
+        projects: [
+          { id: "proj_1", name: "marketing-site", isPersonal: false },
+          { id: "proj_2", name: "pricing", isPersonal: false },
+        ],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces }),
+        saveWorkspace: (input) => {
+          saved = input as typeof saved;
+          const workspace = {
+            id: saved!.workspaceId!,
+            name: saved!.name,
+            projectIds: saved!.projectIds,
+          };
+          workspaces = [workspace];
+          return { workspace };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.contextMenu(await screen.findByRole("tab", { name: "Landing" }));
+    const menu = await screen.findByRole("menu", {
+      name: "Landing workspace actions",
+    });
+    fireEvent.click(within(menu).getByText("Edit workspace"));
+
+    const dialog = screen.getByRole("dialog", { name: "Edit workspace" });
+    fireEvent.change(within(dialog).getByLabelText("Workspace name"), {
+      target: { value: "Launch" },
+    });
+    fireEvent.click(within(dialog).getByLabelText("pricing"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(saved).toEqual({
+        workspaceId: "workspace_landing",
+        name: "Launch",
+        projectIds: ["proj_1"],
+      }),
+    );
+    expect(await screen.findByRole("tab", { name: "Launch" })).toBeDefined();
+  });
+
   it("scopes to one project", () => {
     render(
       [

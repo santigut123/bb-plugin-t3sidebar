@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
+import * as ContextMenu from "@radix-ui/react-context-menu";
 import type { PluginSidebarProject } from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
+import { usePortalScopeProps } from "./lib/portal-scope";
 import { cn } from "./lib/utils";
 import { hashHue, projectAccentFromHue } from "./project-colors";
 import type { Workspace, WorkspacesApi } from "./useWorkspaces";
@@ -16,7 +18,8 @@ export function WorkspaceTabs({
   projects: readonly PluginSidebarProject[];
   workspaces: WorkspacesApi;
 }) {
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [editor, setEditor] = useState<Workspace | "new" | null>(null);
+  const portalScope = usePortalScopeProps();
 
   return (
     <>
@@ -40,26 +43,43 @@ export function WorkspaceTabs({
               const active = workspace.id === activeWorkspaceId;
               const accent = projectAccentFromHue(hashHue(workspace.id));
               return (
-                <button
-                  key={workspace.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  className={cn(
-                    "flex shrink-0 items-center gap-1.5 border-b-2 px-2 text-xs font-medium transition-colors",
-                    active
-                      ? "border-primary text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground",
-                  )}
-                  onClick={() => onActiveWorkspaceChange(workspace.id)}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 rounded-full"
-                    style={{ backgroundColor: accent.stripe }}
-                  />
-                  {workspace.name}
-                </button>
+                <ContextMenu.Root key={workspace.id}>
+                  <ContextMenu.Trigger asChild>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      className={cn(
+                        "flex shrink-0 items-center gap-1.5 border-b-2 px-2 text-xs font-medium transition-colors",
+                        active
+                          ? "border-primary text-foreground"
+                          : "border-transparent text-muted-foreground hover:text-foreground",
+                      )}
+                      onClick={() => onActiveWorkspaceChange(workspace.id)}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="size-1.5 rounded-full"
+                        style={{ backgroundColor: accent.stripe }}
+                      />
+                      {workspace.name}
+                    </button>
+                  </ContextMenu.Trigger>
+                  <ContextMenu.Portal>
+                    <ContextMenu.Content
+                      {...portalScope}
+                      aria-label={`${workspace.name} workspace actions`}
+                      className="z-50 min-w-40 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
+                    >
+                      <ContextMenu.Item
+                        className="cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
+                        onSelect={() => setEditor(workspace)}
+                      >
+                        Edit workspace
+                      </ContextMenu.Item>
+                    </ContextMenu.Content>
+                  </ContextMenu.Portal>
+                </ContextMenu.Root>
               );
             })
           )}
@@ -68,19 +88,21 @@ export function WorkspaceTabs({
           type="button"
           aria-label="Add workspace"
           className="ml-1 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-          onClick={() => setEditorOpen(true)}
+          onClick={() => setEditor("new")}
         >
           <Icon name="Plus" className="size-4" />
         </button>
       </div>
-      {editorOpen ? (
+      {editor !== null ? (
         <WorkspaceEditor
+          key={editor === "new" ? "new" : editor.id}
           projects={projects}
-          onCancel={() => setEditorOpen(false)}
+          workspace={editor === "new" ? null : editor}
+          onCancel={() => setEditor(null)}
           onSave={async (input) => {
             const workspace = await workspaces.save(input);
             onActiveWorkspaceChange(workspace.id);
-            setEditorOpen(false);
+            setEditor(null);
           }}
         />
       ) : null}
