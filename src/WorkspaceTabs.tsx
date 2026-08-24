@@ -99,6 +99,15 @@ export function WorkspaceTabs({
           projects={projects}
           workspace={editor === "new" ? null : editor}
           onCancel={() => setEditor(null)}
+          onDelete={
+            editor === "new"
+              ? undefined
+              : async () => {
+                  await workspaces.delete(editor.id);
+                  onActiveWorkspaceChange(null);
+                  setEditor(null);
+                }
+          }
           onSave={async (input) => {
             const workspace = await workspaces.save(input);
             onActiveWorkspaceChange(workspace.id);
@@ -112,11 +121,13 @@ export function WorkspaceTabs({
 
 function WorkspaceEditor({
   onCancel,
+  onDelete,
   onSave,
   projects,
   workspace = null,
 }: {
   onCancel(): void;
+  onDelete?: () => Promise<void>;
   onSave(input: {
     workspaceId: string | null;
     name: string;
@@ -132,13 +143,16 @@ function WorkspaceEditor({
     () => new Set(workspace?.projectIds ?? []),
   );
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     nameInput.current?.focus();
   }, []);
 
-  const canSave = name.trim().length > 0 && selected.size > 0 && !saving;
+  const busy = saving || deleting;
+  const canSave = name.trim().length > 0 && selected.size > 0 && !busy;
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4"
@@ -223,21 +237,56 @@ function WorkspaceEditor({
           </p>
         ) : null}
 
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            className="h-8 rounded-md px-3 text-xs text-muted-foreground hover:bg-state-hover hover:text-foreground"
-            onClick={onCancel}
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={!canSave}
-            className="h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50"
-          >
-            {saving ? "Saving…" : workspace === null ? "Create" : "Save"}
-          </button>
+        <div className="mt-4 flex items-center justify-between gap-2">
+          {onDelete ? (
+            <button
+              type="button"
+              disabled={busy}
+              className="h-8 rounded-md px-2 text-xs text-destructive-text hover:bg-state-hover disabled:opacity-50"
+              onClick={() => {
+                if (!confirmDelete) {
+                  setConfirmDelete(true);
+                  return;
+                }
+                setDeleting(true);
+                setError(null);
+                void onDelete()
+                  .catch((reason: unknown) => {
+                    setError(
+                      reason instanceof Error
+                        ? reason.message
+                        : "Could not delete workspace.",
+                    );
+                  })
+                  .finally(() => setDeleting(false));
+              }}
+            >
+              {deleting
+                ? "Deleting…"
+                : confirmDelete
+                  ? "Confirm delete"
+                  : "Delete workspace"}
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              className="h-8 rounded-md px-3 text-xs text-muted-foreground hover:bg-state-hover hover:text-foreground disabled:opacity-50"
+              onClick={onCancel}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!canSave}
+              className="h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50"
+            >
+              {saving ? "Saving…" : workspace === null ? "Create" : "Save"}
+            </button>
+          </div>
         </div>
       </form>
     </div>

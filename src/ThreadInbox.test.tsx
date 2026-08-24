@@ -411,6 +411,55 @@ describe("ThreadInbox", () => {
     expect(await screen.findByRole("tab", { name: "Launch" })).toBeDefined();
   });
 
+  it("deletes a workspace after an explicit confirmation", async () => {
+    let workspaces = [
+      {
+        id: "workspace_linux",
+        name: "Linux",
+        projectIds: ["proj_1"],
+      },
+    ];
+    let deleted: string | undefined;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread()],
+        projects: [{ id: "proj_1", name: "dotfiles", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces }),
+        deleteWorkspace: (input) => {
+          deleted = (input as { workspaceId: string }).workspaceId;
+          workspaces = [];
+          return { ok: true };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.contextMenu(await screen.findByRole("tab", { name: "Linux" }));
+    fireEvent.click(
+      within(
+        await screen.findByRole("menu", {
+          name: "Linux workspace actions",
+        }),
+      ).getByText("Edit workspace"),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Edit workspace" });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Delete workspace" }),
+    );
+    expect(deleted).toBeUndefined();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Confirm delete" }),
+    );
+
+    await waitFor(() => expect(deleted).toBe("workspace_linux"));
+    expect(await screen.findByRole("tab", { name: "All projects" })).toBeDefined();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("scopes to one project", () => {
     render(
       [
