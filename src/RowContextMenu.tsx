@@ -4,11 +4,13 @@ import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
+import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
 import {
   PROJECT_COLOR_SWATCH_HUES,
   projectAccentFromHue,
 } from "./project-colors";
+import type { WorkspacesApi } from "./useWorkspaces";
 
 /**
  * This sidebar's own right-click menu.
@@ -26,6 +28,7 @@ export function RowContextMenu({
   hasCustomProjectColor,
   onSetProjectColor,
   onResetProjectColor,
+  workspaces,
   children,
 }: {
   thread: PluginSidebarThread;
@@ -34,6 +37,7 @@ export function RowContextMenu({
   hasCustomProjectColor: boolean;
   onSetProjectColor: (hue: number) => void;
   onResetProjectColor: () => void;
+  workspaces: WorkspacesApi;
   children: ReactNode;
 }) {
   const actions = useSidebarThreadActions();
@@ -60,6 +64,9 @@ export function RowContextMenu({
           >
             {thread.isPinned ? "Unpin" : "Pin"}
           </Item>
+          {workspaces.workspaces.length > 0 ? (
+            <WorkspaceSubmenu thread={thread} workspaces={workspaces} />
+          ) : null}
           <Separator />
           <ContextMenu.Sub>
             <ContextMenu.SubTrigger className="cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground">
@@ -118,6 +125,61 @@ export function RowContextMenu({
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
+  );
+}
+
+function WorkspaceSubmenu({
+  thread,
+  workspaces,
+}: {
+  thread: PluginSidebarThread;
+  workspaces: WorkspacesApi;
+}) {
+  return (
+    <ContextMenu.Sub>
+      <ContextMenu.SubTrigger className="cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground">
+        Add to workspace
+      </ContextMenu.SubTrigger>
+      <ContextMenu.Portal>
+        <ContextMenu.SubContent
+          aria-label="Add to workspace"
+          className="z-50 w-56 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
+        >
+          {workspaces.workspaces.map((workspace) => {
+            const added = workspace.threadIds.includes(thread.id);
+            return (
+              <ContextMenu.CheckboxItem
+                key={workspace.id}
+                checked={added}
+                disabled={added}
+                onSelect={() => {
+                  void workspaces.save({
+                    workspaceId: workspace.id,
+                    name: workspace.name,
+                    projectIds: [
+                      ...new Set([...workspace.projectIds, thread.projectId]),
+                    ],
+                    threadIds: [
+                      ...new Set([...workspace.threadIds, thread.id]),
+                    ],
+                  });
+                }}
+                className={cn(
+                  "relative flex cursor-pointer items-center rounded-md py-1.5 pl-7 pr-2 text-sm outline-none",
+                  "data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground",
+                  "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+                )}
+              >
+                <ContextMenu.ItemIndicator className="absolute left-2 flex size-4 items-center justify-center">
+                  <Icon name="Check" className="size-3.5" />
+                </ContextMenu.ItemIndicator>
+                <span className="min-w-0 truncate">{workspace.name}</span>
+              </ContextMenu.CheckboxItem>
+            );
+          })}
+        </ContextMenu.SubContent>
+      </ContextMenu.Portal>
+    </ContextMenu.Sub>
   );
 }
 

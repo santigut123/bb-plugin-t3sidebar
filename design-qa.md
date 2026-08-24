@@ -39,6 +39,7 @@
 
 - Loaded existing project-only workspace rows after migration and confirmed that selecting one showed no threads instead of automatically including every thread from its projects.
 - Edited Landing and Linux to select different active threads from the same `bb-plugin-t3sidebar` project, then confirmed that each workspace showed only its own selected thread.
+- In a separate Chromium tab, right-clicked `Create landing page hero mockup`, opened **Add to workspace**, and confirmed Landing, Linux, and Cross-app were all available. Adding it to Landing increased that workspace to two threads; reopening the submenu showed Landing as checked and disabled.
 - Clicked the active workspace again and confirmed it became deselected and restored all 19 active threads.
 - Confirmed the editor exposes active thread checkboxes only after their projects are selected.
 - Opened the right-click workspace menu, confirmed the edit form was prefilled, changed names, and saved them.
@@ -64,6 +65,7 @@ The focused workspace-rail comparison makes the important details readable at th
 - [x] Render all workspace names in a single always-visible horizontal rail.
 - [x] Filter threads by explicit membership and project scope by the selected workspace.
 - [x] Deselect the active workspace on a second click and restore all threads.
+- [x] Add an individual thread to a workspace from its right-click menu.
 - [x] Create, rename, change membership, and safely delete workspaces.
 - [x] Verify primary interactions in the browser with realistic data.
 - [x] Run automated tests, type checking, production build, and console-error check.

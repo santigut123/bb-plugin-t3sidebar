@@ -245,6 +245,7 @@ export function ThreadInbox({
     onNavigate,
     onSettle: () => lifecycle.settle(thread.id),
     onSnooze: (until: number) => lifecycle.snooze(thread.id, until),
+    workspaces,
     now,
   });
 
@@ -346,6 +347,7 @@ export function ThreadInbox({
               lifecycle={lifecycle}
               projectNameById={projectNameById}
               projectColors={projectColors}
+              workspaces={workspaces}
               onNavigate={onNavigate}
             />
             <ParkedShelf
@@ -370,6 +372,7 @@ export function ThreadInbox({
               lifecycle={lifecycle}
               projectNameById={projectNameById}
               projectColors={projectColors}
+              workspaces={workspaces}
               onNavigate={onNavigate}
             />
           </>
@@ -413,6 +416,7 @@ function ParkedShelf({
   lifecycle,
   projectNameById,
   projectColors,
+  workspaces,
   onNavigate,
 }: {
   label: string;
@@ -427,6 +431,7 @@ function ParkedShelf({
   lifecycle: ReturnType<typeof useLifecycle>;
   projectNameById: ReadonlyMap<string, string>;
   projectColors: ReturnType<typeof useProjectColors>;
+  workspaces: ReturnType<typeof useWorkspaces>;
   onNavigate: () => void;
 }) {
   if (threads.length === 0) return null;
@@ -498,6 +503,7 @@ function ParkedShelf({
               onResetProjectColor={() =>
                 projectColors.resetColor(thread.projectId)
               }
+              workspaces={workspaces}
               isActive={thread.id === activeThreadId}
               shelf={shelf}
               wakeAt={lifecycle.wakeAtFor(thread)}

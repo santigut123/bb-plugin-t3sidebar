@@ -8,6 +8,7 @@
   membership, plus create, edit, and delete controls. Projects can be reused
   across workspaces without pulling every active thread into each one, and
   clicking the selected workspace returns to the all-threads view.
+- Thread context menus can add an individual thread directly to a workspace.
 - The Settled shelf now has a right-click action to archive all settled threads.
 
 ### Changed

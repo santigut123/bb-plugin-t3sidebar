@@ -8,6 +8,7 @@ import { RowContextMenu } from "./RowContextMenu";
 import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
 import { threadDisplayTitle } from "./inbox";
 import { snoozeWakeLabel } from "./lifecycle";
+import type { WorkspacesApi } from "./useWorkspaces";
 
 /**
  * A parked thread: one line instead of a card. Density comes from the user
@@ -30,6 +31,7 @@ export function SlimRow({
   animateStatusIcons,
   onNavigate,
   onRestore,
+  workspaces,
 }: {
   thread: PluginSidebarThread;
   projectName: string | null;
@@ -44,6 +46,7 @@ export function SlimRow({
   animateStatusIcons: boolean;
   onNavigate: () => void;
   onRestore: () => void;
+  workspaces: WorkspacesApi;
 }) {
   const actions = useSidebarThreadActions();
   const title = threadDisplayTitle(thread);
@@ -56,6 +59,7 @@ export function SlimRow({
       hasCustomProjectColor={hasCustomProjectColor}
       onSetProjectColor={onSetProjectColor}
       onResetProjectColor={onResetProjectColor}
+      workspaces={workspaces}
     >
       <li className="list-none">
         <div
