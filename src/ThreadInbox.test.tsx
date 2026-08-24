@@ -69,6 +69,7 @@ function testRpc(
     listLifecycle: () => ({ rows: [] }),
     listProjectColors: () => ({ rows: [] }),
     listTurnStarts: () => ({ rows: [] }),
+    listWorkspaces: () => ({ workspaces: [] }),
     ...overrides,
   };
 }
@@ -249,6 +250,106 @@ describe("ThreadInbox", () => {
   it("ships no new-thread button of its own", () => {
     render([thread({ id: "a" })]);
     expect(screen.queryByLabelText("New thread")).toBeNull();
+  });
+
+  it("keeps every workspace visible as a tab and filters on selection", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "landing", title: "Hero copy", projectId: "proj_1" }),
+          thread({ id: "linux", title: "Hyprland setup", projectId: "proj_2" }),
+        ],
+        projects: [
+          { id: "proj_1", name: "marketing-site", isPersonal: false },
+          { id: "proj_2", name: "dotfiles", isPersonal: false },
+        ],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({
+          workspaces: [
+            {
+              id: "workspace_landing",
+              name: "Landing",
+              projectIds: ["proj_1"],
+            },
+            {
+              id: "workspace_linux",
+              name: "Linux",
+              projectIds: ["proj_2"],
+            },
+          ],
+        }),
+      }),
+      settings: testSettings(),
+    });
+
+    const landing = await screen.findByRole("tab", { name: "Landing" });
+    const linux = screen.getByRole("tab", { name: "Linux" });
+    expect(landing.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Hero copy")).toBeDefined();
+    expect(screen.queryByText("Hyprland setup")).toBeNull();
+
+    fireEvent.click(linux);
+    expect(linux.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Hyprland setup")).toBeDefined();
+    expect(screen.queryByText("Hero copy")).toBeNull();
+  });
+
+  it("creates a named workspace from selected projects", async () => {
+    let workspaces: Array<{
+      id: string;
+      name: string;
+      projectIds: string[];
+    }> = [];
+    let saved:
+      | { workspaceId: string | null; name: string; projectIds: string[] }
+      | undefined;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread()],
+        projects: [
+          { id: "proj_1", name: "marketing-site", isPersonal: false },
+          { id: "proj_2", name: "pricing", isPersonal: false },
+        ],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces }),
+        saveWorkspace: (input) => {
+          saved = input as typeof saved;
+          const workspace = {
+            id: "workspace_landing",
+            name: saved!.name,
+            projectIds: saved!.projectIds,
+          };
+          workspaces = [workspace];
+          return { workspace };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Add workspace" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "New workspace" });
+    fireEvent.change(within(dialog).getByLabelText("Workspace name"), {
+      target: { value: "Landing page" },
+    });
+    fireEvent.click(within(dialog).getByLabelText("marketing-site"));
+    fireEvent.click(within(dialog).getByLabelText("pricing"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(saved).toEqual({
+        workspaceId: null,
+        name: "Landing page",
+        projectIds: ["proj_1", "proj_2"],
+      }),
+    );
+    expect(await screen.findByRole("tab", { name: "Landing page" })).toBeDefined();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("scopes to one project", () => {
