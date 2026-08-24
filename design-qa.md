@@ -33,12 +33,14 @@
 - Spacing and layout rhythm: passed. Tabs remain in one persistent row, the selected underline aligns to its label, and the add control remains fixed at the right edge while the thread list scrolls independently.
 - Colors and visual tokens: passed. Workspace dots, selected underline, text, borders, background, hover, and destructive states use existing bb/plugin theme tokens; the differing palette is intentional theme adaptation.
 - Image quality and asset fidelity: passed. The design contains no raster product imagery. The plus control uses the project's existing Hugeicons library; no placeholder, custom SVG, CSS drawing, emoji, or text glyph replaces a visible asset.
-- Copy and content: passed. Landing, Linux, Cross-app, All projects, creation/edit copy, and realistic project membership are present and functional.
+- Copy and content: passed. Landing, Linux, Cross-app, All projects, creation/edit copy, and explicit project/thread membership are present and functional.
 
 ## Runtime and interaction evidence
 
-- Created Landing, Linux, and Cross-app workspaces from live project checkboxes.
-- Switched workspaces and confirmed the thread list filters to their project memberships.
+- Loaded existing project-only workspace rows after migration and confirmed that selecting one showed no threads instead of automatically including every thread from its projects.
+- Edited Landing and Linux to select different active threads from the same `bb-plugin-t3sidebar` project, then confirmed that each workspace showed only its own selected thread.
+- Clicked the active workspace again and confirmed it became deselected and restored all 19 active threads.
+- Confirmed the editor exposes active thread checkboxes only after their projects are selected.
 - Opened the right-click workspace menu, confirmed the edit form was prefilled, changed names, and saved them.
 - Confirmed the delete action is visible; its two-stage confirmation and deletion behavior are covered by the automated UI test.
 - Confirmed the add control remains visible beside all three workspace names.
@@ -58,9 +60,10 @@ The focused workspace-rail comparison makes the important details readable at th
 
 ## Implementation checklist
 
-- [x] Persist named project groups in plugin-owned SQLite storage.
+- [x] Persist named project and explicit thread membership in plugin-owned SQLite storage.
 - [x] Render all workspace names in a single always-visible horizontal rail.
-- [x] Filter threads and project scope by the selected workspace.
+- [x] Filter threads by explicit membership and project scope by the selected workspace.
+- [x] Deselect the active workspace on a second click and restore all threads.
 - [x] Create, rename, change membership, and safely delete workspaces.
 - [x] Verify primary interactions in the browser with realistic data.
 - [x] Run automated tests, type checking, production build, and console-error check.

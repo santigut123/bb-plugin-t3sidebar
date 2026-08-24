@@ -21,10 +21,14 @@ picker.
 ## Workspaces
 
 Workspaces sit in a compact, always-visible row at the top of the list. Each
-one has a name and groups one or more bb projects, so selecting a workspace
-shows only the threads for that area of work. Use **+** to create one, then
-right-click its tab to rename it, change its projects, or delete it. Workspace
-names and membership are stored in the plugin's SQLite database.
+one has a name, one or more bb projects, and an explicit selection of threads.
+Projects define the context available inside the workspace; adding a project
+does not automatically add all of its active threads. This means the same
+project can appear in several workspaces with a different set of threads in
+each. Use **+** to create one, then right-click its tab to rename it, change its
+projects or threads, or delete it. Click the selected workspace again to return
+to the all-threads view. Workspace names and membership are stored in the
+plugin's SQLite database.
 
 ## The idea
 
@@ -83,7 +87,7 @@ root row, and its header shows no parent chip.
 | `experimental_useSidebarThreadSplit`               | dragging a card out to a split pane                                                         |
 | `experimental_useSidebarThreadPullRequest`         | the `#412` badge, coloured by bb's attention state                                          |
 | `@radix-ui/react-context-menu` (shimmed)           | this plugin's own right-click menu, built on the action hook                                |
-| `bb.storage.database()` + `bb.rpc` + `bb.realtime` | settled/snoozed state and named project workspaces                                          |
+| `bb.storage.database()` + `bb.rpc` + `bb.realtime` | settled/snoozed state and named project/thread workspaces                                   |
 
 The plugin API ships **no components**. Status glyphs and the right-click menu
 are both this plugin's own: `indicator` arrives as data, and every menu item is

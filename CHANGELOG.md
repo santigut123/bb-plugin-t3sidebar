@@ -4,8 +4,10 @@
 
 ### Added
 
-- Always-visible named workspace tabs for grouping and filtering multiple
-  projects, with create, edit, and delete controls.
+- Always-visible named workspace tabs with explicit project and thread
+  membership, plus create, edit, and delete controls. Projects can be reused
+  across workspaces without pulling every active thread into each one, and
+  clicking the selected workspace returns to the all-threads view.
 - The Settled shelf now has a right-click action to archive all settled threads.
 
 ### Changed
