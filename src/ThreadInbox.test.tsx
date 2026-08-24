@@ -822,11 +822,11 @@ describe("row context menu", () => {
     fireEvent.contextMenu(await screen.findByText("Right click me"));
     const menu = await screen.findByRole("menu", { name: "Thread actions" });
     fireEvent.click(
-      within(menu).getByRole("menuitem", { name: "Add to workspace" }),
+      within(menu).getByRole("menuitem", { name: "Workspaces" }),
     );
 
     const workspaceMenu = await screen.findByRole("menu", {
-      name: "Add to workspace",
+      name: "Workspaces",
     });
     const landing = within(workspaceMenu).getByRole("menuitemcheckbox", {
       name: "Landing",
@@ -835,7 +835,7 @@ describe("row context menu", () => {
       name: "Linux",
     });
     expect(linux.getAttribute("aria-checked")).toBe("true");
-    expect(linux.getAttribute("data-disabled")).not.toBeNull();
+    expect(linux.getAttribute("data-disabled")).toBeNull();
     fireEvent.click(landing);
 
     await waitFor(() =>
@@ -844,6 +844,72 @@ describe("row context menu", () => {
         name: "Landing",
         projectIds: ["proj_other", "proj_1"],
         threadIds: ["thr_other", "thr_menu"],
+      }),
+    );
+  });
+
+  it("removes the right-clicked thread from a workspace", async () => {
+    const workspaces = [
+      {
+        id: "workspace_linux",
+        name: "Linux",
+        projectIds: ["proj_1"],
+        threadIds: ["thr_menu", "thr_other"],
+      },
+    ];
+    let saved:
+      | {
+          workspaceId: string | null;
+          name: string;
+          projectIds: string[];
+          threadIds: string[];
+        }
+      | undefined;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_menu", title: "Right click me" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces }),
+        saveWorkspace: (input) => {
+          saved = input as typeof saved;
+          return {
+            workspace: {
+              id: saved!.workspaceId!,
+              name: saved!.name,
+              projectIds: saved!.projectIds,
+              threadIds: saved!.threadIds,
+            },
+          };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.contextMenu(await screen.findByText("Right click me"));
+    const menu = await screen.findByRole("menu", { name: "Thread actions" });
+    fireEvent.click(
+      within(menu).getByRole("menuitem", { name: "Workspaces" }),
+    );
+
+    const workspaceMenu = await screen.findByRole("menu", {
+      name: "Workspaces",
+    });
+    const linux = within(workspaceMenu).getByRole("menuitemcheckbox", {
+      name: "Linux",
+    });
+    expect(linux.getAttribute("aria-checked")).toBe("true");
+    expect(linux.getAttribute("data-disabled")).toBeNull();
+    fireEvent.click(linux);
+
+    await waitFor(() =>
+      expect(saved).toEqual({
+        workspaceId: "workspace_linux",
+        name: "Linux",
+        projectIds: ["proj_1"],
+        threadIds: ["thr_other"],
       }),
     );
   });

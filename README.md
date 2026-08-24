@@ -27,7 +27,7 @@ does not automatically add all of its active threads. This means the same
 project can appear in several workspaces with a different set of threads in
 each. Use **+** to create one, then right-click its tab to rename it, change its
 projects or threads, or delete it. You can also right-click any thread and use
-**Add to workspace** to assign it directly. Click the selected workspace again
+**Workspaces** to add or remove it directly. Click the selected workspace again
 to return to the all-threads view. Workspace names and membership are stored in
 the plugin's SQLite database.
 

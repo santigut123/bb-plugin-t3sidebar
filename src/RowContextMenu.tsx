@@ -138,11 +138,11 @@ function WorkspaceSubmenu({
   return (
     <ContextMenu.Sub>
       <ContextMenu.SubTrigger className="cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground">
-        Add to workspace
+        Workspaces
       </ContextMenu.SubTrigger>
       <ContextMenu.Portal>
         <ContextMenu.SubContent
-          aria-label="Add to workspace"
+          aria-label="Workspaces"
           className="z-50 w-56 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
         >
           {workspaces.workspaces.map((workspace) => {
@@ -151,17 +151,23 @@ function WorkspaceSubmenu({
               <ContextMenu.CheckboxItem
                 key={workspace.id}
                 checked={added}
-                disabled={added}
                 onSelect={() => {
                   void workspaces.save({
                     workspaceId: workspace.id,
                     name: workspace.name,
-                    projectIds: [
-                      ...new Set([...workspace.projectIds, thread.projectId]),
-                    ],
-                    threadIds: [
-                      ...new Set([...workspace.threadIds, thread.id]),
-                    ],
+                    projectIds: added
+                      ? workspace.projectIds
+                      : [
+                          ...new Set([
+                            ...workspace.projectIds,
+                            thread.projectId,
+                          ]),
+                        ],
+                    threadIds: added
+                      ? workspace.threadIds.filter(
+                          (threadId) => threadId !== thread.id,
+                        )
+                      : [...new Set([...workspace.threadIds, thread.id])],
                   });
                 }}
                 className={cn(
