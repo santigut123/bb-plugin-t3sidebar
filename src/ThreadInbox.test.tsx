@@ -335,6 +335,57 @@ describe("ThreadInbox", () => {
     expect(screen.getByText("No threads in this workspace")).toBeDefined();
   });
 
+  it("adds a newly created root thread to the selected workspace", async () => {
+    const threads = [thread({ id: "existing", title: "Existing" })];
+    const memberships: unknown[] = [];
+    const workspace = {
+      id: "workspace_landing",
+      name: "Landing",
+      projectIds: ["proj_1"],
+      threadIds: ["existing"],
+    };
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads,
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces: [{ ...workspace }] }),
+        setWorkspaceThreadMembership: (input) => {
+          memberships.push(input);
+          return { workspace };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: workspace.name }),
+    );
+    threads.push(
+      thread({ id: "created", title: "Created", projectId: "proj_1" }),
+      thread({
+        id: "child",
+        title: "Child",
+        projectId: "proj_1",
+        parentThreadId: "existing",
+      }),
+    );
+    await rendered.behavior.emitRealtime("workspaces", {});
+
+    await waitFor(() =>
+      expect(memberships).toEqual([
+        {
+          workspaceId: workspace.id,
+          projectId: "proj_1",
+          threadId: "created",
+          included: true,
+        },
+      ]),
+    );
+  });
+
   it("creates a named workspace from selected projects and threads", async () => {
     let workspaces: Array<{
       id: string;

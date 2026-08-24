@@ -217,6 +217,61 @@ describe("workspace RPC", () => {
 
     await harness.lifecycle.dispose();
   });
+
+  it("adds a created child thread to every workspace containing its parent", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3sidebar",
+      sdk: {
+        subscribe: () => () => {},
+        threads: { events: { list: async () => [] } },
+      },
+    });
+    await plugin(bb);
+
+    const inherited = (await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "Inherited",
+      projectIds: ["proj_parent"],
+      threadIds: ["thr_parent"],
+    })) as { workspace: { id: string } };
+    const unrelated = (await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "Unrelated",
+      projectIds: ["proj_other"],
+      threadIds: ["thr_other"],
+    })) as { workspace: { id: string } };
+
+    await harness.behavior.emitThreadEvent("thread.created", {
+      thread: makeThreadResponse({
+        id: "thr_child",
+        parentThreadId: "thr_parent",
+        projectId: "proj_child",
+      }),
+    });
+
+    expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
+      workspaces: [
+        {
+          id: inherited.workspace.id,
+          name: "Inherited",
+          projectIds: ["proj_parent", "proj_child"],
+          threadIds: ["thr_parent", "thr_child"],
+        },
+        {
+          id: unrelated.workspace.id,
+          name: "Unrelated",
+          projectIds: ["proj_other"],
+          threadIds: ["thr_other"],
+        },
+      ],
+    });
+    expect(harness.inspection.realtimeSignals.at(-1)).toEqual({
+      channel: WORKSPACES_CHANNEL,
+      payload: { workspaceId: inherited.workspace.id },
+    });
+
+    await harness.lifecycle.dispose();
+  });
 });
 
 describe("turn start RPC", () => {

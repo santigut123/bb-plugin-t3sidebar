@@ -24,6 +24,8 @@
 
 ### Fixed
 
+- New root threads now join the currently selected workspace, while child
+  threads inherit their parent's workspace membership.
 - Workspace membership updates now compose safely across multiple bb tabs and
   report failures without closing the thread context menu.
 - Deleting one workspace no longer deselects a different active workspace.

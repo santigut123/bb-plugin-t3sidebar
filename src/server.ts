@@ -516,6 +516,25 @@ export default function plugin(bb: BbPluginApi) {
     },
   });
 
+  bb.events.on("thread.created", ({ thread }) => {
+    if (thread.parentThreadId === null) return;
+    for (const workspace of readWorkspaces()) {
+      if (
+        !workspace.threadIds.includes(thread.parentThreadId) ||
+        workspace.threadIds.includes(thread.id)
+      ) {
+        continue;
+      }
+      setWorkspaceThreadMembership(
+        workspace.id,
+        thread.projectId,
+        thread.id,
+        true,
+      );
+      publishWorkspace(workspace.id);
+    }
+  });
+
   // A deleted thread must not leave a row behind that would park a future
   // thread reusing the id, and stale rows accumulate otherwise.
   bb.events.on("thread.deleted", ({ thread }) => {

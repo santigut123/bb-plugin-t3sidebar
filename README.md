@@ -28,8 +28,10 @@ project can appear in several workspaces with a different set of threads in
 each. Use **+** to create one, then right-click its tab to rename it, change its
 projects or threads, or delete it. You can also right-click any thread and use
 **Workspaces** to add or remove it directly. Click the selected workspace again
-to return to the all-threads view. Workspace names and membership are stored in
-the plugin's SQLite database.
+to return to the all-threads view. A root thread created from bb's New-thread
+button joins the workspace selected at creation time. Threads created by an
+existing thread inherit every workspace containing their parent. Workspace
+names and membership are stored in the plugin's SQLite database.
 
 ## The idea
 
