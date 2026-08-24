@@ -1,16 +1,15 @@
 # Workspace Tabs Design QA
 
-## Comparison target
+## Comparison method
 
-- Source visual truth: `/home/chicken/.codex/generated_images/01a03595-a4ec-7980-a026-cbecc391ecf0/exec-1de8ee99-872d-4b26-a94b-5680ac904efe.png`
-- Browser-rendered implementation: `/tmp/t3sidebar-implementation.png`
-- Full-view comparison: `/tmp/t3sidebar-design-comparison.png` (source left, implementation right)
-- Focused workspace-rail comparison: `/tmp/t3sidebar-tabs-comparison.png` (source left, implementation right)
+- Compared the selected concept with the browser-rendered implementation at
+  full-sidebar and focused workspace-rail scales.
 - State: bb dark theme with the Gruvbox palette, realistic projects and threads, three named workspaces, Landing selected, project scope set to All projects.
 - Browser viewport: 2884 × 1541 CSS px; rendered sidebar measured 409 CSS px wide.
 - Source pixels: 803 × 1959. The ImageGen export has no declared density metadata.
 - Implementation pixels: 409 × 1000 from a 450 × 1100 CSS-pixel browser clip at the browser's reported 1.323 device-pixel ratio and display scaling.
-- Density normalization: implementation resized to 803 × 1959 only for the side-by-side comparison. The original capture remains unchanged at the path above.
+- Density normalization: the implementation was resized to 803 × 1959 only
+  for the side-by-side comparison; neither source image was modified.
 
 ## Findings
 
