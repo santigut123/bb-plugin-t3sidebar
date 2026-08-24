@@ -116,12 +116,14 @@ export function ThreadInbox({
   const activeWorkspace =
     workspaces.workspaces.find(
       (workspace) => workspace.id === activeWorkspaceId,
-    ) ??
-    workspaces.workspaces[0] ??
-    null;
+    ) ?? null;
   const workspaceProjectIds = useMemo(
     () =>
       activeWorkspace === null ? null : new Set(activeWorkspace.projectIds),
+    [activeWorkspace],
+  );
+  const workspaceThreadIds = useMemo(
+    () => (activeWorkspace === null ? null : new Set(activeWorkspace.threadIds)),
     [activeWorkspace],
   );
   const visibleProjects = useMemo(
@@ -139,10 +141,10 @@ export function ThreadInbox({
 
   const { pinned, inbox, snoozed, settled } = useMemo(() => {
     const workspaceThreads =
-      workspaceProjectIds === null
+      workspaceThreadIds === null
         ? visibleInboxThreads(threads)
         : visibleInboxThreads(threads).filter((thread) =>
-            workspaceProjectIds.has(thread.projectId),
+            workspaceThreadIds.has(thread.id),
           );
     const scoped = filterByProject(
       workspaceThreads,
@@ -169,7 +171,7 @@ export function ThreadInbox({
       ),
       settled: sortByCreatedAtDescending(onSettledShelf),
     };
-  }, [effectiveScope, lifecycle, searchQuery, threads, workspaceProjectIds]);
+  }, [effectiveScope, lifecycle, searchQuery, threads, workspaceThreadIds]);
 
   const displayedPinned = hideCollapsedDescendants(
     pinned,
@@ -209,6 +211,11 @@ export function ThreadInbox({
       : (projectNameById.get(effectiveScope) ?? "All projects");
   const showProjectAccent =
     projectColorStripes && effectiveScope === ALL_PROJECTS;
+  let emptyThreadMessage = "No threads yet";
+  if (searchQuery.trim()) emptyThreadMessage = "No threads found";
+  else if (activeWorkspace !== null) {
+    emptyThreadMessage = "No threads in this workspace";
+  }
 
   const threadCardProps = (
     thread: PluginSidebarThread,
@@ -250,6 +257,7 @@ export function ThreadInbox({
           setScope(ALL_PROJECTS);
         }}
         projects={projects}
+        threads={threads}
         workspaces={workspaces}
       />
       {/* Everything else in the chrome above — New thread, search — is bb's
@@ -295,7 +303,7 @@ export function ThreadInbox({
             role="status"
             className="px-2 py-6 text-center text-xs text-muted-foreground"
           >
-            {searchQuery.trim() ? "No threads found" : "No threads yet"}
+            {emptyThreadMessage}
           </p>
         ) : (
           <>

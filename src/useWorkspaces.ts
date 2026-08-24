@@ -10,6 +10,7 @@ export interface Workspace {
   id: string;
   name: string;
   projectIds: string[];
+  threadIds: string[];
 }
 
 export interface WorkspacesApi {
@@ -18,6 +19,7 @@ export interface WorkspacesApi {
     workspaceId: string | null;
     name: string;
     projectIds: string[];
+    threadIds: string[];
   }): Promise<Workspace>;
   delete(workspaceId: string): Promise<void>;
 }

@@ -84,14 +84,21 @@ describe("workspace RPC", () => {
       workspaceId: null,
       name: "  Landing page  ",
       projectIds: ["proj_marketing", "proj_pricing", "proj_marketing"],
+      threadIds: ["thr_hero", "thr_pricing", "thr_hero"],
     })) as {
-      workspace: { id: string; name: string; projectIds: string[] };
+      workspace: {
+        id: string;
+        name: string;
+        projectIds: string[];
+        threadIds: string[];
+      };
     };
 
     expect(created.workspace).toEqual({
       id: expect.stringMatching(/^workspace_/),
       name: "Landing page",
       projectIds: ["proj_marketing", "proj_pricing"],
+      threadIds: ["thr_hero", "thr_pricing"],
     });
     expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
       workspaces: [created.workspace],
@@ -101,14 +108,40 @@ describe("workspace RPC", () => {
       workspaceId: created.workspace.id,
       name: "Launch",
       projectIds: ["proj_pricing"],
+      threadIds: ["thr_pricing"],
     });
     expect(updated).toEqual({
       workspace: {
         id: created.workspace.id,
         name: "Launch",
         projectIds: ["proj_pricing"],
+        threadIds: ["thr_pricing"],
       },
     });
+
+    const sibling = (await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "Pricing experiment",
+      projectIds: ["proj_pricing"],
+      threadIds: ["thr_pricing_experiment"],
+    })) as { workspace: typeof created.workspace };
+    const listed = (await harness.behavior.callRpc("listWorkspaces", {})) as {
+      workspaces: Array<typeof created.workspace>;
+    };
+    expect(listed.workspaces).toEqual([
+      {
+        id: created.workspace.id,
+        name: "Launch",
+        projectIds: ["proj_pricing"],
+        threadIds: ["thr_pricing"],
+      },
+      {
+        id: sibling.workspace.id,
+        name: "Pricing experiment",
+        projectIds: ["proj_pricing"],
+        threadIds: ["thr_pricing_experiment"],
+      },
+    ]);
 
     expect(harness.inspection.realtimeSignals).toEqual([
       {
@@ -119,13 +152,17 @@ describe("workspace RPC", () => {
         channel: WORKSPACES_CHANNEL,
         payload: { workspaceId: created.workspace.id },
       },
+      {
+        channel: WORKSPACES_CHANNEL,
+        payload: { workspaceId: sibling.workspace.id },
+      },
     ]);
 
     await harness.behavior.callRpc("deleteWorkspace", {
       workspaceId: created.workspace.id,
     });
     expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
-      workspaces: [],
+      workspaces: [sibling.workspace],
     });
 
     await harness.lifecycle.dispose();

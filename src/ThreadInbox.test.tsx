@@ -252,18 +252,15 @@ describe("ThreadInbox", () => {
     expect(screen.queryByLabelText("New thread")).toBeNull();
   });
 
-  it("keeps every workspace visible as a tab and filters on selection", async () => {
+  it("filters by explicit thread membership and deselects the active workspace", async () => {
     renderSlot(inbox, listProps, {
       sidebarThreads: {
         status: "ready",
         threads: [
           thread({ id: "landing", title: "Hero copy", projectId: "proj_1" }),
-          thread({ id: "linux", title: "Hyprland setup", projectId: "proj_2" }),
+          thread({ id: "linux", title: "Hyprland setup", projectId: "proj_1" }),
         ],
-        projects: [
-          { id: "proj_1", name: "marketing-site", isPersonal: false },
-          { id: "proj_2", name: "dotfiles", isPersonal: false },
-        ],
+        projects: [{ id: "proj_1", name: "shared-project", isPersonal: false }],
       },
       rpc: testRpc({
         listWorkspaces: () => ({
@@ -272,11 +269,13 @@ describe("ThreadInbox", () => {
               id: "workspace_landing",
               name: "Landing",
               projectIds: ["proj_1"],
+              threadIds: ["landing"],
             },
             {
               id: "workspace_linux",
               name: "Linux",
-              projectIds: ["proj_2"],
+              projectIds: ["proj_1"],
+              threadIds: ["linux"],
             },
           ],
         }),
@@ -286,9 +285,19 @@ describe("ThreadInbox", () => {
 
     const landing = await screen.findByRole("tab", { name: "Landing" });
     const linux = screen.getByRole("tab", { name: "Linux" });
+    expect(landing.getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByText("Hero copy")).toBeDefined();
+    expect(screen.getByText("Hyprland setup")).toBeDefined();
+
+    fireEvent.click(landing);
     expect(landing.getAttribute("aria-selected")).toBe("true");
     expect(screen.getByText("Hero copy")).toBeDefined();
     expect(screen.queryByText("Hyprland setup")).toBeNull();
+
+    fireEvent.click(landing);
+    expect(landing.getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByText("Hero copy")).toBeDefined();
+    expect(screen.getByText("Hyprland setup")).toBeDefined();
 
     fireEvent.click(linux);
     expect(linux.getAttribute("aria-selected")).toBe("true");
@@ -296,19 +305,64 @@ describe("ThreadInbox", () => {
     expect(screen.queryByText("Hero copy")).toBeNull();
   });
 
-  it("creates a named workspace from selected projects", async () => {
+  it("does not include a project's threads until they are selected", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "landing", title: "Hero copy", projectId: "proj_1" }),
+        ],
+        projects: [{ id: "proj_1", name: "marketing-site", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({
+          workspaces: [
+            {
+              id: "workspace_landing",
+              name: "Landing",
+              projectIds: ["proj_1"],
+              threadIds: [],
+            },
+          ],
+        }),
+      }),
+      settings: testSettings(),
+    });
+
+    expect(screen.getByText("Hero copy")).toBeDefined();
+    fireEvent.click(await screen.findByRole("tab", { name: "Landing" }));
+    expect(screen.queryByText("Hero copy")).toBeNull();
+    expect(screen.getByText("No threads in this workspace")).toBeDefined();
+  });
+
+  it("creates a named workspace from selected projects and threads", async () => {
     let workspaces: Array<{
       id: string;
       name: string;
       projectIds: string[];
+      threadIds: string[];
     }> = [];
     let saved:
-      | { workspaceId: string | null; name: string; projectIds: string[] }
+      | {
+          workspaceId: string | null;
+          name: string;
+          projectIds: string[];
+          threadIds: string[];
+        }
       | undefined;
     renderSlot(inbox, listProps, {
       sidebarThreads: {
         status: "ready",
-        threads: [thread()],
+        threads: [
+          thread({ id: "thr_1", title: "Marketing thread" }),
+          thread({ id: "thr_2", title: "Pricing thread", projectId: "proj_2" }),
+          thread({
+            id: "thr_archived",
+            title: "Archived pricing thread",
+            projectId: "proj_2",
+            isArchived: true,
+          }),
+        ],
         projects: [
           { id: "proj_1", name: "marketing-site", isPersonal: false },
           { id: "proj_2", name: "pricing", isPersonal: false },
@@ -322,6 +376,7 @@ describe("ThreadInbox", () => {
             id: "workspace_landing",
             name: saved!.name,
             projectIds: saved!.projectIds,
+            threadIds: saved!.threadIds,
           };
           workspaces = [workspace];
           return { workspace };
@@ -339,6 +394,10 @@ describe("ThreadInbox", () => {
     });
     fireEvent.click(within(dialog).getByLabelText("marketing-site"));
     fireEvent.click(within(dialog).getByLabelText("pricing"));
+    expect(
+      within(dialog).queryByLabelText("Archived pricing thread"),
+    ).toBeNull();
+    fireEvent.click(within(dialog).getByLabelText("Marketing thread"));
     fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
 
     await waitFor(() =>
@@ -346,27 +405,37 @@ describe("ThreadInbox", () => {
         workspaceId: null,
         name: "Landing page",
         projectIds: ["proj_1", "proj_2"],
+        threadIds: ["thr_1"],
       }),
     );
     expect(await screen.findByRole("tab", { name: "Landing page" })).toBeDefined();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("renames a workspace and changes its project membership", async () => {
+  it("renames a workspace and changes its membership", async () => {
     let workspaces = [
       {
         id: "workspace_landing",
         name: "Landing",
         projectIds: ["proj_1", "proj_2"],
+        threadIds: ["thr_1", "thr_2"],
       },
     ];
     let saved:
-      | { workspaceId: string | null; name: string; projectIds: string[] }
+      | {
+          workspaceId: string | null;
+          name: string;
+          projectIds: string[];
+          threadIds: string[];
+        }
       | undefined;
     renderSlot(inbox, listProps, {
       sidebarThreads: {
         status: "ready",
-        threads: [thread()],
+        threads: [
+          thread({ id: "thr_1", title: "Marketing thread" }),
+          thread({ id: "thr_2", title: "Pricing thread", projectId: "proj_2" }),
+        ],
         projects: [
           { id: "proj_1", name: "marketing-site", isPersonal: false },
           { id: "proj_2", name: "pricing", isPersonal: false },
@@ -380,6 +449,7 @@ describe("ThreadInbox", () => {
             id: saved!.workspaceId!,
             name: saved!.name,
             projectIds: saved!.projectIds,
+            threadIds: saved!.threadIds,
           };
           workspaces = [workspace];
           return { workspace };
@@ -406,6 +476,7 @@ describe("ThreadInbox", () => {
         workspaceId: "workspace_landing",
         name: "Launch",
         projectIds: ["proj_1"],
+        threadIds: ["thr_1"],
       }),
     );
     expect(await screen.findByRole("tab", { name: "Launch" })).toBeDefined();
@@ -417,6 +488,7 @@ describe("ThreadInbox", () => {
         id: "workspace_linux",
         name: "Linux",
         projectIds: ["proj_1"],
+        threadIds: ["thr_1"],
       },
     ];
     let deleted: string | undefined;

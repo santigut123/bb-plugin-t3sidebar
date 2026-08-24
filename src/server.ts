@@ -24,6 +24,8 @@ const migrations = [
      project_ids TEXT NOT NULL,
      position    INTEGER NOT NULL
    )`,
+  `ALTER TABLE workspaces
+     ADD COLUMN thread_ids TEXT NOT NULL DEFAULT '[]'`,
 ];
 
 export interface StoredLifecycleRow {
@@ -54,12 +56,14 @@ export interface StoredWorkspace {
   id: string;
   name: string;
   projectIds: string[];
+  threadIds: string[];
 }
 
 interface WorkspaceDbRow {
   id: string;
   name: string;
   project_ids: string;
+  thread_ids: string;
 }
 
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
@@ -72,6 +76,7 @@ const workspaceSchema = z.object({
   id: z.string(),
   name: z.string(),
   projectIds: z.array(z.string()),
+  threadIds: z.array(z.string()),
 });
 
 export const t3sidebarRpcContract = defineRpcContract({
@@ -143,6 +148,7 @@ export const t3sidebarRpcContract = defineRpcContract({
       workspaceId: z.string().trim().min(1).nullable(),
       name: z.string().trim().min(1).max(64),
       projectIds: z.array(z.string().trim().min(1)).min(1).max(100),
+      threadIds: z.array(z.string().trim().min(1)).max(500),
     }),
     output: z.object({ workspace: workspaceSchema }),
   },
@@ -256,7 +262,7 @@ export default function plugin(bb: BbPluginApi) {
     (
       db
         .prepare(
-          `SELECT id, name, project_ids
+          `SELECT id, name, project_ids, thread_ids
              FROM workspaces
             ORDER BY position, id`,
         )
@@ -265,6 +271,7 @@ export default function plugin(bb: BbPluginApi) {
       id: row.id,
       name: row.name,
       projectIds: JSON.parse(row.project_ids) as string[],
+      threadIds: JSON.parse(row.thread_ids) as string[],
     }));
 
   const publishWorkspace = (workspaceId: string): void => {
@@ -371,16 +378,19 @@ export default function plugin(bb: BbPluginApi) {
     async listWorkspaces() {
       return { workspaces: readWorkspaces() };
     },
-    async saveWorkspace({ workspaceId, name, projectIds }) {
+    async saveWorkspace({ workspaceId, name, projectIds, threadIds }) {
       const workspace: StoredWorkspace = {
         id: workspaceId ?? `workspace_${crypto.randomUUID()}`,
         name: name.trim(),
         projectIds: [...new Set(projectIds)],
+        threadIds: [...new Set(threadIds)],
       };
       if (workspaceId === null) {
         db.prepare(
-          `INSERT INTO workspaces (id, name, project_ids, position)
+          `INSERT INTO workspaces
+             (id, name, project_ids, thread_ids, position)
            VALUES (
+             ?,
              ?,
              ?,
              ?,
@@ -390,17 +400,19 @@ export default function plugin(bb: BbPluginApi) {
           workspace.id,
           workspace.name,
           JSON.stringify(workspace.projectIds),
+          JSON.stringify(workspace.threadIds),
         );
       } else {
         const result = db
           .prepare(
             `UPDATE workspaces
-                SET name = ?, project_ids = ?
+                SET name = ?, project_ids = ?, thread_ids = ?
               WHERE id = ?`,
           )
           .run(
             workspace.name,
             JSON.stringify(workspace.projectIds),
+            JSON.stringify(workspace.threadIds),
             workspace.id,
           );
         if (result.changes === 0) throw new Error("Workspace not found.");

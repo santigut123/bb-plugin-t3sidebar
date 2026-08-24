@@ -1,6 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
-import type { PluginSidebarProject } from "@get-bb/plugin-sdk/app";
+import type {
+  PluginSidebarProject,
+  PluginSidebarThread,
+} from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
 import { usePortalScopeProps } from "./lib/portal-scope";
 import { cn } from "./lib/utils";
@@ -11,11 +14,13 @@ export function WorkspaceTabs({
   activeWorkspaceId,
   onActiveWorkspaceChange,
   projects,
+  threads,
   workspaces,
 }: {
   activeWorkspaceId: string | null;
   onActiveWorkspaceChange(workspaceId: string | null): void;
   projects: readonly PluginSidebarProject[];
+  threads: readonly PluginSidebarThread[];
   workspaces: WorkspacesApi;
 }) {
   const [editor, setEditor] = useState<Workspace | "new" | null>(null);
@@ -55,7 +60,9 @@ export function WorkspaceTabs({
                           ? "border-primary text-foreground"
                           : "border-transparent text-muted-foreground hover:text-foreground",
                       )}
-                      onClick={() => onActiveWorkspaceChange(workspace.id)}
+                      onClick={() =>
+                        onActiveWorkspaceChange(active ? null : workspace.id)
+                      }
                     >
                       <span
                         aria-hidden="true"
@@ -97,6 +104,7 @@ export function WorkspaceTabs({
         <WorkspaceEditor
           key={editor === "new" ? "new" : editor.id}
           projects={projects}
+          threads={threads}
           workspace={editor === "new" ? null : editor}
           onCancel={() => setEditor(null)}
           onDelete={
@@ -124,6 +132,7 @@ function WorkspaceEditor({
   onDelete,
   onSave,
   projects,
+  threads,
   workspace = null,
 }: {
   onCancel(): void;
@@ -132,15 +141,20 @@ function WorkspaceEditor({
     workspaceId: string | null;
     name: string;
     projectIds: string[];
+    threadIds: string[];
   }): Promise<void>;
   projects: readonly PluginSidebarProject[];
+  threads: readonly PluginSidebarThread[];
   workspace?: Workspace | null;
 }) {
   const titleId = useId();
   const nameInput = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(workspace?.name ?? "");
-  const [selected, setSelected] = useState<ReadonlySet<string>>(
+  const [selectedProjects, setSelectedProjects] = useState<ReadonlySet<string>>(
     () => new Set(workspace?.projectIds ?? []),
+  );
+  const [selectedThreads, setSelectedThreads] = useState<ReadonlySet<string>>(
+    () => new Set(workspace?.threadIds ?? []),
   );
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -152,7 +166,17 @@ function WorkspaceEditor({
   }, []);
 
   const busy = saving || deleting;
-  const canSave = name.trim().length > 0 && selected.size > 0 && !busy;
+  const canSave = name.trim().length > 0 && selectedProjects.size > 0 && !busy;
+  const availableThreads = threads.filter(
+    (thread) =>
+      !thread.isArchived && selectedProjects.has(thread.projectId),
+  );
+  const availableThreadIds = new Set(
+    availableThreads.map((thread) => thread.id),
+  );
+  const projectNameById = new Map(
+    projects.map((project) => [project.id, project.name]),
+  );
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4"
@@ -167,7 +191,7 @@ function WorkspaceEditor({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="w-full max-w-sm rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-lg"
+        className="max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-lg"
         onSubmit={(event) => {
           event.preventDefault();
           if (!canSave) return;
@@ -176,7 +200,10 @@ function WorkspaceEditor({
           void onSave({
             workspaceId: workspace?.id ?? null,
             name: name.trim(),
-            projectIds: [...selected],
+            projectIds: [...selectedProjects],
+            threadIds: [...selectedThreads].filter((threadId) =>
+              availableThreadIds.has(threadId),
+            ),
           })
             .catch((reason: unknown) => {
               setError(
@@ -190,10 +217,14 @@ function WorkspaceEditor({
           {workspace === null ? "New workspace" : "Edit workspace"}
         </h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Group projects so their threads stay focused together.
+          Choose the projects available here, then include only the threads you
+          need.
         </p>
 
-        <label className="mt-4 block text-xs font-medium" htmlFor={`${titleId}-name`}>
+        <label
+          className="mt-4 block text-xs font-medium"
+          htmlFor={`${titleId}-name`}
+        >
           Workspace name
         </label>
         <input
@@ -215,19 +246,83 @@ function WorkspaceEditor({
               >
                 <input
                   type="checkbox"
-                  checked={selected.has(project.id)}
+                  checked={selectedProjects.has(project.id)}
                   onChange={(event) => {
-                    setSelected((current) => {
+                    setSelectedProjects((current) => {
                       const next = new Set(current);
                       if (event.target.checked) next.add(project.id);
                       else next.delete(project.id);
                       return next;
                     });
+                    if (!event.target.checked) {
+                      const removedThreadIds = new Set(
+                        threads
+                          .filter((thread) => thread.projectId === project.id)
+                          .map((thread) => thread.id),
+                      );
+                      setSelectedThreads(
+                        (current) =>
+                          new Set(
+                            [...current].filter(
+                              (threadId) => !removedThreadIds.has(threadId),
+                            ),
+                          ),
+                      );
+                    }
                   }}
                 />
                 <span className="min-w-0 truncate">{project.name}</span>
               </label>
             ))}
+          </div>
+        </fieldset>
+
+        <fieldset className="mt-4">
+          <legend className="text-xs font-medium">Threads</legend>
+          <div className="mt-1 max-h-52 overflow-y-auto rounded-md border border-border p-1">
+            {selectedProjects.size === 0 ? (
+              <p className="px-2 py-2 text-xs text-muted-foreground">
+                Select a project to choose its threads.
+              </p>
+            ) : availableThreads.length === 0 ? (
+              <p className="px-2 py-2 text-xs text-muted-foreground">
+                No active threads in the selected projects.
+              </p>
+            ) : (
+              availableThreads.map((thread) => {
+                const title =
+                  thread.title?.trim() ||
+                  thread.titleFallback?.trim() ||
+                  "Untitled thread";
+                return (
+                  <label
+                    key={thread.id}
+                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded px-2 hover:bg-state-hover"
+                  >
+                    <input
+                      type="checkbox"
+                      aria-label={title}
+                      checked={selectedThreads.has(thread.id)}
+                      onChange={(event) => {
+                        setSelectedThreads((current) => {
+                          const next = new Set(current);
+                          if (event.target.checked) next.add(thread.id);
+                          else next.delete(thread.id);
+                          return next;
+                        });
+                      }}
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs">{title}</span>
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {projectNameById.get(thread.projectId) ??
+                          "Unknown project"}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })
+            )}
           </div>
         </fieldset>
 
