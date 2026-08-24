@@ -22,6 +22,14 @@
   circle.
 - Working threads again show a live elapsed time for the current turn.
 
+### Fixed
+
+- Workspace membership updates now compose safely across multiple bb tabs and
+  report failures without closing the thread context menu.
+- Deleting one workspace no longer deselects a different active workspace.
+- Workspace filters and the workspace editor now expose correct toggle and
+  modal keyboard semantics, including focus restoration when the editor closes.
+
 ## 0.2.0 - 2026-08-20
 
 ### Added

@@ -11,6 +11,7 @@ import {
   projectAccentFromHue,
 } from "./project-colors";
 import type { WorkspacesApi } from "./useWorkspaces";
+import { WorkspaceSubmenu } from "./WorkspaceSubmenu";
 
 /**
  * This sidebar's own right-click menu.
@@ -125,67 +126,6 @@ export function RowContextMenu({
         </ContextMenu.Content>
       </ContextMenu.Portal>
     </ContextMenu.Root>
-  );
-}
-
-function WorkspaceSubmenu({
-  thread,
-  workspaces,
-}: {
-  thread: PluginSidebarThread;
-  workspaces: WorkspacesApi;
-}) {
-  return (
-    <ContextMenu.Sub>
-      <ContextMenu.SubTrigger className="cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground">
-        Workspaces
-      </ContextMenu.SubTrigger>
-      <ContextMenu.Portal>
-        <ContextMenu.SubContent
-          aria-label="Workspaces"
-          className="z-50 w-56 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
-        >
-          {workspaces.workspaces.map((workspace) => {
-            const added = workspace.threadIds.includes(thread.id);
-            return (
-              <ContextMenu.CheckboxItem
-                key={workspace.id}
-                checked={added}
-                onSelect={() => {
-                  void workspaces.save({
-                    workspaceId: workspace.id,
-                    name: workspace.name,
-                    projectIds: added
-                      ? workspace.projectIds
-                      : [
-                          ...new Set([
-                            ...workspace.projectIds,
-                            thread.projectId,
-                          ]),
-                        ],
-                    threadIds: added
-                      ? workspace.threadIds.filter(
-                          (threadId) => threadId !== thread.id,
-                        )
-                      : [...new Set([...workspace.threadIds, thread.id])],
-                  });
-                }}
-                className={cn(
-                  "relative flex cursor-pointer items-center rounded-md py-1.5 pl-7 pr-2 text-sm outline-none",
-                  "data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground",
-                  "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-                )}
-              >
-                <ContextMenu.ItemIndicator className="absolute left-2 flex size-4 items-center justify-center">
-                  <Icon name="Check" className="size-3.5" />
-                </ContextMenu.ItemIndicator>
-                <span className="min-w-0 truncate">{workspace.name}</span>
-              </ContextMenu.CheckboxItem>
-            );
-          })}
-        </ContextMenu.SubContent>
-      </ContextMenu.Portal>
-    </ContextMenu.Sub>
   );
 }
 
