@@ -4,11 +4,14 @@ import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   type PluginSidebarThread,
 } from "@get-bb/plugin-sdk/app";
+import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
 import {
   PROJECT_COLOR_SWATCH_HUES,
   projectAccentFromHue,
 } from "./project-colors";
+import type { WorkspacesApi } from "./useWorkspaces";
+import { WorkspaceSubmenu } from "./WorkspaceSubmenu";
 
 /**
  * This sidebar's own right-click menu.
@@ -26,6 +29,7 @@ export function RowContextMenu({
   hasCustomProjectColor,
   onSetProjectColor,
   onResetProjectColor,
+  workspaces,
   children,
 }: {
   thread: PluginSidebarThread;
@@ -34,6 +38,7 @@ export function RowContextMenu({
   hasCustomProjectColor: boolean;
   onSetProjectColor: (hue: number) => void;
   onResetProjectColor: () => void;
+  workspaces: WorkspacesApi;
   children: ReactNode;
 }) {
   const actions = useSidebarThreadActions();
@@ -60,6 +65,9 @@ export function RowContextMenu({
           >
             {thread.isPinned ? "Unpin" : "Pin"}
           </Item>
+          {workspaces.workspaces.length > 0 ? (
+            <WorkspaceSubmenu thread={thread} workspaces={workspaces} />
+          ) : null}
           <Separator />
           <ContextMenu.Sub>
             <ContextMenu.SubTrigger className="cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground">

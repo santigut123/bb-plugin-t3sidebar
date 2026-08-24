@@ -35,6 +35,8 @@ import {
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import { statusPresentation } from "./StatusGlyph";
 import { useTurnStarts } from "./useTurnStarts";
+import { WorkspaceTabs } from "./WorkspaceTabs";
+import { useWorkspaces } from "./useWorkspaces";
 import {
   filterByProject,
   hideCollapsedDescendants,
@@ -51,8 +53,8 @@ const ALL_PROJECTS = "__all__";
  * The sidebar's scrolling list: stable root cards with descendants beneath.
  *
  * The host owns the New-thread button and the search field above it, so this
- * ships neither. It filters by the `searchQuery` prop and keeps only the one
- * control the host has no equivalent for: the project scope picker.
+ * ships neither. It filters by the `searchQuery` prop and adds the controls
+ * the host has no equivalent for: workspaces and the project scope picker.
  */
 export function ThreadInbox({
   activeThreadId,
@@ -63,6 +65,7 @@ export function ThreadInbox({
   const actions = useSidebarThreadActions();
   const lifecycle = useLifecycle(threads);
   const projectColors = useProjectColors();
+  const workspaces = useWorkspaces();
   const { values: settingsValues } = useSettings();
   const workingShimmer = parseWorkingShimmerVariant(
     settingsValues?.[WORKING_SHIMMER_SETTING_KEY],
@@ -83,6 +86,9 @@ export function ThreadInbox({
     settingsValues?.[UNREAD_TITLE_WEIGHT_SETTING_KEY],
   );
   const [scope, setScope] = useState<string>(ALL_PROJECTS);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(
+    null,
+  );
   // One clock for every card in a render, quantized to the minute so the
   // labels do not disagree and do not churn on unrelated re-renders.
   const [nowMinute, setNowMinute] = useState(() =>
@@ -107,10 +113,42 @@ export function ThreadInbox({
     [projects],
   );
 
+  const activeWorkspace =
+    workspaces.workspaces.find(
+      (workspace) => workspace.id === activeWorkspaceId,
+    ) ?? null;
+  const workspaceProjectIds = useMemo(
+    () =>
+      activeWorkspace === null ? null : new Set(activeWorkspace.projectIds),
+    [activeWorkspace],
+  );
+  const workspaceThreadIds = useMemo(
+    () => (activeWorkspace === null ? null : new Set(activeWorkspace.threadIds)),
+    [activeWorkspace],
+  );
+  const visibleProjects = useMemo(
+    () =>
+      workspaceProjectIds === null
+        ? projects
+        : projects.filter((project) => workspaceProjectIds.has(project.id)),
+    [projects, workspaceProjectIds],
+  );
+  const effectiveScope =
+    scope === ALL_PROJECTS ||
+    visibleProjects.some((project) => project.id === scope)
+      ? scope
+      : ALL_PROJECTS;
+
   const { pinned, inbox, snoozed, settled } = useMemo(() => {
+    const workspaceThreads =
+      workspaceThreadIds === null
+        ? visibleInboxThreads(threads)
+        : visibleInboxThreads(threads).filter((thread) =>
+            workspaceThreadIds.has(thread.id),
+          );
     const scoped = filterByProject(
-      visibleInboxThreads(threads),
-      scope === ALL_PROJECTS ? null : scope,
+      workspaceThreads,
+      effectiveScope === ALL_PROJECTS ? null : effectiveScope,
     );
     const matched = searchThreadsByTitle(scoped, searchQuery);
     const active: typeof matched = [];
@@ -133,7 +171,7 @@ export function ThreadInbox({
       ),
       settled: sortByCreatedAtDescending(onSettledShelf),
     };
-  }, [lifecycle, scope, searchQuery, threads]);
+  }, [effectiveScope, lifecycle, searchQuery, threads, workspaceThreadIds]);
 
   const displayedPinned = hideCollapsedDescendants(
     pinned,
@@ -168,11 +206,16 @@ export function ThreadInbox({
   };
 
   const scopeLabel =
-    scope === ALL_PROJECTS
+    effectiveScope === ALL_PROJECTS
       ? "All projects"
-      : (projectNameById.get(scope) ?? "All projects");
+      : (projectNameById.get(effectiveScope) ?? "All projects");
   const showProjectAccent =
-    projectColorStripes && scope === ALL_PROJECTS;
+    projectColorStripes && effectiveScope === ALL_PROJECTS;
+  let emptyThreadMessage = "No threads yet";
+  if (searchQuery.trim()) emptyThreadMessage = "No threads found";
+  else if (activeWorkspace !== null) {
+    emptyThreadMessage = "No threads in this workspace";
+  }
 
   const threadCardProps = (
     thread: PluginSidebarThread,
@@ -202,15 +245,26 @@ export function ThreadInbox({
     onNavigate,
     onSettle: () => lifecycle.settle(thread.id),
     onSnooze: (until: number) => lifecycle.snooze(thread.id, until),
+    workspaces,
     now,
   });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* The one control the host has no equivalent for. Everything else in
-          the chrome above — New thread, search — is bb's and stays bb's. */}
+      <WorkspaceTabs
+        activeWorkspaceId={activeWorkspace?.id ?? null}
+        onActiveWorkspaceChange={(workspaceId) => {
+          setActiveWorkspaceId(workspaceId);
+          setScope(ALL_PROJECTS);
+        }}
+        projects={projects}
+        threads={threads}
+        workspaces={workspaces}
+      />
+      {/* Everything else in the chrome above — New thread, search — is bb's
+          and stays bb's. */}
       <div className="flex shrink-0 items-center gap-1 px-2 pb-1">
-        <Select value={scope} onValueChange={setScope}>
+        <Select value={effectiveScope} onValueChange={setScope}>
           {/* Ghost trigger: no border, no filled track — it reads as a label
               until you hover it. */}
           <SelectTrigger
@@ -223,7 +277,7 @@ export function ThreadInbox({
             <SelectItem value={ALL_PROJECTS} className="text-xs">
               All projects
             </SelectItem>
-            {projects.map((project) => (
+            {visibleProjects.map((project) => (
               <SelectItem
                 key={project.id}
                 value={project.id}
@@ -250,7 +304,7 @@ export function ThreadInbox({
             role="status"
             className="px-2 py-6 text-center text-xs text-muted-foreground"
           >
-            {searchQuery.trim() ? "No threads found" : "No threads yet"}
+            {emptyThreadMessage}
           </p>
         ) : (
           <>
@@ -293,6 +347,7 @@ export function ThreadInbox({
               lifecycle={lifecycle}
               projectNameById={projectNameById}
               projectColors={projectColors}
+              workspaces={workspaces}
               onNavigate={onNavigate}
             />
             <ParkedShelf
@@ -317,6 +372,7 @@ export function ThreadInbox({
               lifecycle={lifecycle}
               projectNameById={projectNameById}
               projectColors={projectColors}
+              workspaces={workspaces}
               onNavigate={onNavigate}
             />
           </>
@@ -360,6 +416,7 @@ function ParkedShelf({
   lifecycle,
   projectNameById,
   projectColors,
+  workspaces,
   onNavigate,
 }: {
   label: string;
@@ -374,6 +431,7 @@ function ParkedShelf({
   lifecycle: ReturnType<typeof useLifecycle>;
   projectNameById: ReadonlyMap<string, string>;
   projectColors: ReturnType<typeof useProjectColors>;
+  workspaces: ReturnType<typeof useWorkspaces>;
   onNavigate: () => void;
 }) {
   if (threads.length === 0) return null;
@@ -445,6 +503,7 @@ function ParkedShelf({
               onResetProjectColor={() =>
                 projectColors.resetColor(thread.projectId)
               }
+              workspaces={workspaces}
               isActive={thread.id === activeThreadId}
               shelf={shelf}
               wakeAt={lifecycle.wakeAtFor(thread)}

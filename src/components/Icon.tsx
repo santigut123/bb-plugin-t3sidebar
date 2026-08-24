@@ -13,6 +13,7 @@ import {
   Edit02Icon,
   HelpCircleIcon,
   Loading03Icon,
+  Add01Icon,
   Radar02Icon,
   Target02Icon,
   Tick02Icon,
@@ -22,6 +23,7 @@ import {
 import { cn } from "../lib/utils";
 
 const ICON_MAP = {
+  Plus: Add01Icon,
   ArrowTurnBackward: ArrowTurnBackwardIcon,
   Check: Tick02Icon,
   ChevronDown: ArrowDown01Icon,

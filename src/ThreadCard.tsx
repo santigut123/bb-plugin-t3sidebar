@@ -14,6 +14,7 @@ import { resolveSnoozePresets } from "./lifecycle";
 import type { ProjectAccent } from "./project-colors";
 import { WorkingShimmer } from "./WorkingShimmer";
 import type { WorkingShimmerVariant } from "./working-shimmer";
+import type { WorkspacesApi } from "./useWorkspaces";
 import {
   type UnreadTitleWeight,
   unreadTitleWeightClass,
@@ -50,6 +51,7 @@ export function ThreadCard({
   onNavigate,
   onSettle,
   onSnooze,
+  workspaces,
   now,
 }: {
   thread: PluginSidebarThread;
@@ -77,6 +79,7 @@ export function ThreadCard({
   onNavigate: () => void;
   onSettle: () => void;
   onSnooze: (snoozedUntil: number) => void;
+  workspaces: WorkspacesApi;
   /** Quantized clock, so every card in one render agrees on "now". */
   now: number;
 }) {
@@ -94,6 +97,7 @@ export function ThreadCard({
       hasCustomProjectColor={hasCustomProjectColor}
       onSetProjectColor={onSetProjectColor}
       onResetProjectColor={onResetProjectColor}
+      workspaces={workspaces}
     >
       <li
         className={cn(

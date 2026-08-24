@@ -4,6 +4,11 @@
 
 ### Added
 
+- Always-visible named workspace tabs with explicit project and thread
+  membership, plus create, edit, and delete controls. Projects can be reused
+  across workspaces without pulling every active thread into each one, and
+  clicking the selected workspace returns to the all-threads view.
+- Thread context menus can add or remove an individual thread directly.
 - The Settled shelf now has a right-click action to archive all settled threads.
 
 ### Changed
@@ -16,6 +21,14 @@
   Monitoring, and activity indicators, including the static dashed Working
   circle.
 - Working threads again show a live elapsed time for the current turn.
+
+### Fixed
+
+- Workspace membership updates now compose safely across multiple bb tabs and
+  report failures without closing the thread context menu.
+- Deleting one workspace no longer deselects a different active workspace.
+- Workspace filters and the workspace editor now expose correct toggle and
+  modal keyboard semantics, including focus restoration when the editor closes.
 
 ## 0.2.0 - 2026-08-20
 

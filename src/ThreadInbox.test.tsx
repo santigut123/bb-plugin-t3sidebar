@@ -69,6 +69,7 @@ function testRpc(
     listLifecycle: () => ({ rows: [] }),
     listProjectColors: () => ({ rows: [] }),
     listTurnStarts: () => ({ rows: [] }),
+    listWorkspaces: () => ({ workspaces: [] }),
     ...overrides,
   };
 }
@@ -249,6 +250,376 @@ describe("ThreadInbox", () => {
   it("ships no new-thread button of its own", () => {
     render([thread({ id: "a" })]);
     expect(screen.queryByLabelText("New thread")).toBeNull();
+  });
+
+  it("filters by explicit thread membership and deselects the active workspace", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "landing", title: "Hero copy", projectId: "proj_1" }),
+          thread({ id: "linux", title: "Hyprland setup", projectId: "proj_1" }),
+        ],
+        projects: [{ id: "proj_1", name: "shared-project", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({
+          workspaces: [
+            {
+              id: "workspace_landing",
+              name: "Landing",
+              projectIds: ["proj_1"],
+              threadIds: ["landing"],
+            },
+            {
+              id: "workspace_linux",
+              name: "Linux",
+              projectIds: ["proj_1"],
+              threadIds: ["linux"],
+            },
+          ],
+        }),
+      }),
+      settings: testSettings(),
+    });
+
+    const landing = await screen.findByRole("button", { name: "Landing" });
+    const linux = screen.getByRole("button", { name: "Linux" });
+    expect(landing.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByText("Hero copy")).toBeDefined();
+    expect(screen.getByText("Hyprland setup")).toBeDefined();
+
+    fireEvent.click(landing);
+    expect(landing.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("Hero copy")).toBeDefined();
+    expect(screen.queryByText("Hyprland setup")).toBeNull();
+
+    fireEvent.click(landing);
+    expect(landing.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByText("Hero copy")).toBeDefined();
+    expect(screen.getByText("Hyprland setup")).toBeDefined();
+
+    fireEvent.click(linux);
+    expect(linux.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("Hyprland setup")).toBeDefined();
+    expect(screen.queryByText("Hero copy")).toBeNull();
+  });
+
+  it("does not include a project's threads until they are selected", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "landing", title: "Hero copy", projectId: "proj_1" }),
+        ],
+        projects: [{ id: "proj_1", name: "marketing-site", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({
+          workspaces: [
+            {
+              id: "workspace_landing",
+              name: "Landing",
+              projectIds: ["proj_1"],
+              threadIds: [],
+            },
+          ],
+        }),
+      }),
+      settings: testSettings(),
+    });
+
+    expect(screen.getByText("Hero copy")).toBeDefined();
+    fireEvent.click(await screen.findByRole("button", { name: "Landing" }));
+    expect(screen.queryByText("Hero copy")).toBeNull();
+    expect(screen.getByText("No threads in this workspace")).toBeDefined();
+  });
+
+  it("creates a named workspace from selected projects and threads", async () => {
+    let workspaces: Array<{
+      id: string;
+      name: string;
+      projectIds: string[];
+      threadIds: string[];
+    }> = [];
+    let saved:
+      | {
+          workspaceId: string | null;
+          name: string;
+          projectIds: string[];
+          threadIds: string[];
+        }
+      | undefined;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "thr_1", title: "Marketing thread" }),
+          thread({ id: "thr_2", title: "Pricing thread", projectId: "proj_2" }),
+          thread({
+            id: "thr_archived",
+            title: "Archived pricing thread",
+            projectId: "proj_2",
+            isArchived: true,
+          }),
+        ],
+        projects: [
+          { id: "proj_1", name: "marketing-site", isPersonal: false },
+          { id: "proj_2", name: "pricing", isPersonal: false },
+        ],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces }),
+        saveWorkspace: (input) => {
+          saved = input as typeof saved;
+          const workspace = {
+            id: "workspace_landing",
+            name: saved!.name,
+            projectIds: saved!.projectIds,
+            threadIds: saved!.threadIds,
+          };
+          workspaces = [workspace];
+          return { workspace };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Add workspace" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "New workspace" });
+    fireEvent.change(within(dialog).getByLabelText("Workspace name"), {
+      target: { value: "Landing page" },
+    });
+    fireEvent.click(within(dialog).getByLabelText("marketing-site"));
+    fireEvent.click(within(dialog).getByLabelText("pricing"));
+    expect(
+      within(dialog).queryByLabelText("Archived pricing thread"),
+    ).toBeNull();
+    fireEvent.click(within(dialog).getByLabelText("Marketing thread"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(saved).toEqual({
+        workspaceId: null,
+        name: "Landing page",
+        projectIds: ["proj_1", "proj_2"],
+        threadIds: ["thr_1"],
+      }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Landing page" }),
+    ).toBeDefined();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("renames a workspace and changes its membership", async () => {
+    let workspaces = [
+      {
+        id: "workspace_landing",
+        name: "Landing",
+        projectIds: ["proj_1", "proj_2"],
+        threadIds: ["thr_1", "thr_2"],
+      },
+    ];
+    let saved:
+      | {
+          workspaceId: string | null;
+          name: string;
+          projectIds: string[];
+          threadIds: string[];
+        }
+      | undefined;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "thr_1", title: "Marketing thread" }),
+          thread({ id: "thr_2", title: "Pricing thread", projectId: "proj_2" }),
+        ],
+        projects: [
+          { id: "proj_1", name: "marketing-site", isPersonal: false },
+          { id: "proj_2", name: "pricing", isPersonal: false },
+        ],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces }),
+        saveWorkspace: (input) => {
+          saved = input as typeof saved;
+          const workspace = {
+            id: saved!.workspaceId!,
+            name: saved!.name,
+            projectIds: saved!.projectIds,
+            threadIds: saved!.threadIds,
+          };
+          workspaces = [workspace];
+          return { workspace };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.contextMenu(
+      await screen.findByRole("button", { name: "Landing" }),
+    );
+    const menu = await screen.findByRole("menu", {
+      name: "Landing workspace actions",
+    });
+    fireEvent.click(within(menu).getByText("Edit workspace"));
+
+    const dialog = screen.getByRole("dialog", { name: "Edit workspace" });
+    fireEvent.change(within(dialog).getByLabelText("Workspace name"), {
+      target: { value: "Launch" },
+    });
+    fireEvent.click(within(dialog).getByLabelText("pricing"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(saved).toEqual({
+        workspaceId: "workspace_landing",
+        name: "Launch",
+        projectIds: ["proj_1"],
+        threadIds: ["thr_1"],
+      }),
+    );
+    expect(await screen.findByRole("button", { name: "Launch" })).toBeDefined();
+  });
+
+  it("deletes a workspace after an explicit confirmation", async () => {
+    let workspaces = [
+      {
+        id: "workspace_linux",
+        name: "Linux",
+        projectIds: ["proj_1"],
+        threadIds: ["thr_1"],
+      },
+    ];
+    let deleted: string | undefined;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread()],
+        projects: [{ id: "proj_1", name: "dotfiles", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces }),
+        deleteWorkspace: (input) => {
+          deleted = (input as { workspaceId: string }).workspaceId;
+          workspaces = [];
+          return { ok: true };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.contextMenu(await screen.findByRole("button", { name: "Linux" }));
+    fireEvent.click(
+      within(
+        await screen.findByRole("menu", {
+          name: "Linux workspace actions",
+        }),
+      ).getByText("Edit workspace"),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Edit workspace" });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Delete workspace" }),
+    );
+    expect(deleted).toBeUndefined();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Confirm delete" }),
+    );
+
+    await waitFor(() => expect(deleted).toBe("workspace_linux"));
+    expect(
+      await screen.findByRole("button", { name: "All projects" }),
+    ).toBeDefined();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("keeps the active workspace selected when another workspace is deleted", async () => {
+    let workspaces = [
+      {
+        id: "workspace_landing",
+        name: "Landing",
+        projectIds: ["proj_1"],
+        threadIds: ["thr_landing"],
+      },
+      {
+        id: "workspace_linux",
+        name: "Linux",
+        projectIds: ["proj_1"],
+        threadIds: ["thr_linux"],
+      },
+    ];
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "thr_landing", title: "Hero copy" }),
+          thread({ id: "thr_linux", title: "Hyprland setup" }),
+        ],
+        projects: [{ id: "proj_1", name: "shared", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces }),
+        deleteWorkspace: (input) => {
+          const { workspaceId } = input as { workspaceId: string };
+          workspaces = workspaces.filter(
+            (workspace) => workspace.id !== workspaceId,
+          );
+          return { ok: true };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    const landing = await screen.findByRole("button", { name: "Landing" });
+    fireEvent.click(landing);
+    expect(screen.queryByText("Hyprland setup")).toBeNull();
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Linux" }));
+    fireEvent.click(
+      within(
+        await screen.findByRole("menu", {
+          name: "Linux workspace actions",
+        }),
+      ).getByText("Edit workspace"),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Edit workspace" });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Delete workspace" }),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Confirm delete" }),
+    );
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(landing.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByText("Hyprland setup")).toBeNull();
+  });
+
+  it("opens a native modal and restores focus when it closes", async () => {
+    render([thread()]);
+    const addWorkspace = await screen.findByRole("button", {
+      name: "Add workspace",
+    });
+    addWorkspace.focus();
+    fireEvent.click(addWorkspace);
+
+    const dialog = screen.getByRole("dialog", { name: "New workspace" });
+    expect(dialog.tagName).toBe("DIALOG");
+    const nameInput = within(dialog).getByLabelText("Workspace name");
+    expect(document.activeElement).toBe(nameInput);
+    fireEvent.keyDown(nameInput, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(
+      within(dialog).getByRole("button", { name: "Cancel" }),
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(addWorkspace);
   });
 
   it("scopes to one project", () => {
@@ -489,6 +860,190 @@ describe("row context menu", () => {
         method: "requestDelete",
         threadId: "thr_del",
       }),
+    );
+  });
+
+  it("adds only the right-clicked thread to a workspace", async () => {
+    const workspaces = [
+      {
+        id: "workspace_landing",
+        name: "Landing",
+        projectIds: ["proj_other"],
+        threadIds: ["thr_other"],
+      },
+      {
+        id: "workspace_linux",
+        name: "Linux",
+        projectIds: ["proj_1"],
+        threadIds: ["thr_menu"],
+      },
+    ];
+    let membership:
+      | {
+          workspaceId: string;
+          projectId: string;
+          threadId: string;
+          included: boolean;
+        }
+      | undefined;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_menu", title: "Right click me" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces }),
+        setWorkspaceThreadMembership: (input) => {
+          membership = input as typeof membership;
+          return {
+            workspace: {
+              id: membership!.workspaceId,
+              name: "Landing",
+              projectIds: ["proj_other", membership!.projectId],
+              threadIds: ["thr_other", membership!.threadId],
+            },
+          };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.contextMenu(await screen.findByText("Right click me"));
+    const menu = await screen.findByRole("menu", { name: "Thread actions" });
+    fireEvent.click(
+      within(menu).getByRole("menuitem", { name: "Workspaces" }),
+    );
+
+    const workspaceMenu = await screen.findByRole("menu", {
+      name: "Workspaces",
+    });
+    const landing = within(workspaceMenu).getByRole("menuitemcheckbox", {
+      name: "Landing",
+    });
+    const linux = within(workspaceMenu).getByRole("menuitemcheckbox", {
+      name: "Linux",
+    });
+    expect(linux.getAttribute("aria-checked")).toBe("true");
+    expect(linux.getAttribute("data-disabled")).toBeNull();
+    fireEvent.click(landing);
+
+    await waitFor(() =>
+      expect(membership).toEqual({
+        workspaceId: "workspace_landing",
+        projectId: "proj_1",
+        threadId: "thr_menu",
+        included: true,
+      }),
+    );
+  });
+
+  it("removes the right-clicked thread from a workspace", async () => {
+    const workspaces = [
+      {
+        id: "workspace_linux",
+        name: "Linux",
+        projectIds: ["proj_1"],
+        threadIds: ["thr_menu", "thr_other"],
+      },
+    ];
+    let membership:
+      | {
+          workspaceId: string;
+          projectId: string;
+          threadId: string;
+          included: boolean;
+        }
+      | undefined;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_menu", title: "Right click me" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces }),
+        setWorkspaceThreadMembership: (input) => {
+          membership = input as typeof membership;
+          return {
+            workspace: {
+              id: membership!.workspaceId,
+              name: "Linux",
+              projectIds: ["proj_1"],
+              threadIds: ["thr_other"],
+            },
+          };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.contextMenu(await screen.findByText("Right click me"));
+    const menu = await screen.findByRole("menu", { name: "Thread actions" });
+    fireEvent.click(
+      within(menu).getByRole("menuitem", { name: "Workspaces" }),
+    );
+
+    const workspaceMenu = await screen.findByRole("menu", {
+      name: "Workspaces",
+    });
+    const linux = within(workspaceMenu).getByRole("menuitemcheckbox", {
+      name: "Linux",
+    });
+    expect(linux.getAttribute("aria-checked")).toBe("true");
+    expect(linux.getAttribute("data-disabled")).toBeNull();
+    fireEvent.click(linux);
+
+    await waitFor(() =>
+      expect(membership).toEqual({
+        workspaceId: "workspace_linux",
+        projectId: "proj_1",
+        threadId: "thr_menu",
+        included: false,
+      }),
+    );
+  });
+
+  it("keeps the workspace menu open and reports membership failures", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "thr_menu", title: "Right click me" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({
+          workspaces: [
+            {
+              id: "workspace_landing",
+              name: "Landing",
+              projectIds: ["proj_1"],
+              threadIds: [],
+            },
+          ],
+        }),
+        setWorkspaceThreadMembership: async () => {
+          throw new Error("Workspace update failed");
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.contextMenu(await screen.findByText("Right click me"));
+    fireEvent.click(
+      within(
+        await screen.findByRole("menu", { name: "Thread actions" }),
+      ).getByRole("menuitem", { name: "Workspaces" }),
+    );
+    const workspaceMenu = await screen.findByRole("menu", {
+      name: "Workspaces",
+    });
+    fireEvent.click(
+      within(workspaceMenu).getByRole("menuitemcheckbox", { name: "Landing" }),
+    );
+
+    expect((await within(workspaceMenu).findByRole("alert")).textContent).toBe(
+      "Workspace update failed",
     );
   });
 

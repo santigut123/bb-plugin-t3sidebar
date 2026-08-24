@@ -3,7 +3,7 @@ import {
   createFakePluginHost,
   makeThreadResponse,
 } from "@get-bb/plugin-sdk/testing";
-import plugin, { TURN_STARTS_CHANNEL } from "./server";
+import plugin, { TURN_STARTS_CHANNEL, WORKSPACES_CHANNEL } from "./server";
 
 function turnStartedEvent(threadId: string, createdAt: number) {
   return {
@@ -65,6 +65,156 @@ describe("lifecycle RPC", () => {
       "grandchild",
       "parent",
     ]);
+    await harness.lifecycle.dispose();
+  });
+});
+
+describe("workspace RPC", () => {
+  it("creates, updates, lists, and deletes named project groups", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3sidebar",
+      sdk: {
+        subscribe: () => () => {},
+        threads: { events: { list: async () => [] } },
+      },
+    });
+    await plugin(bb);
+
+    const created = (await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "  Landing page  ",
+      projectIds: ["proj_marketing", "proj_pricing", "proj_marketing"],
+      threadIds: ["thr_hero", "thr_pricing", "thr_hero"],
+    })) as {
+      workspace: {
+        id: string;
+        name: string;
+        projectIds: string[];
+        threadIds: string[];
+      };
+    };
+
+    expect(created.workspace).toEqual({
+      id: expect.stringMatching(/^workspace_/),
+      name: "Landing page",
+      projectIds: ["proj_marketing", "proj_pricing"],
+      threadIds: ["thr_hero", "thr_pricing"],
+    });
+    expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
+      workspaces: [created.workspace],
+    });
+
+    const updated = await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: created.workspace.id,
+      name: "Launch",
+      projectIds: ["proj_pricing"],
+      threadIds: ["thr_pricing"],
+    });
+    expect(updated).toEqual({
+      workspace: {
+        id: created.workspace.id,
+        name: "Launch",
+        projectIds: ["proj_pricing"],
+        threadIds: ["thr_pricing"],
+      },
+    });
+
+    const sibling = (await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "Pricing experiment",
+      projectIds: ["proj_pricing"],
+      threadIds: ["thr_pricing_experiment"],
+    })) as { workspace: typeof created.workspace };
+    const listed = (await harness.behavior.callRpc("listWorkspaces", {})) as {
+      workspaces: Array<typeof created.workspace>;
+    };
+    expect(listed.workspaces).toEqual([
+      {
+        id: created.workspace.id,
+        name: "Launch",
+        projectIds: ["proj_pricing"],
+        threadIds: ["thr_pricing"],
+      },
+      {
+        id: sibling.workspace.id,
+        name: "Pricing experiment",
+        projectIds: ["proj_pricing"],
+        threadIds: ["thr_pricing_experiment"],
+      },
+    ]);
+
+    expect(harness.inspection.realtimeSignals).toEqual([
+      {
+        channel: WORKSPACES_CHANNEL,
+        payload: { workspaceId: created.workspace.id },
+      },
+      {
+        channel: WORKSPACES_CHANNEL,
+        payload: { workspaceId: created.workspace.id },
+      },
+      {
+        channel: WORKSPACES_CHANNEL,
+        payload: { workspaceId: sibling.workspace.id },
+      },
+    ]);
+
+    await harness.behavior.callRpc("deleteWorkspace", {
+      workspaceId: created.workspace.id,
+    });
+    expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
+      workspaces: [sibling.workspace],
+    });
+
+    await harness.lifecycle.dispose();
+  });
+
+  it("updates one thread membership without replacing concurrent workspace changes", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3sidebar",
+      sdk: {
+        subscribe: () => () => {},
+        threads: { events: { list: async () => [] } },
+      },
+    });
+    await plugin(bb);
+
+    const created = (await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "Shared work",
+      projectIds: ["proj_base"],
+      threadIds: ["thr_base"],
+    })) as { workspace: { id: string } };
+
+    await harness.behavior.callRpc("setWorkspaceThreadMembership", {
+      workspaceId: created.workspace.id,
+      projectId: "proj_landing",
+      threadId: "thr_landing",
+      included: true,
+    });
+    await harness.behavior.callRpc("setWorkspaceThreadMembership", {
+      workspaceId: created.workspace.id,
+      projectId: "proj_linux",
+      threadId: "thr_linux",
+      included: true,
+    });
+    await harness.behavior.callRpc("setWorkspaceThreadMembership", {
+      workspaceId: created.workspace.id,
+      projectId: "proj_landing",
+      threadId: "thr_landing",
+      included: false,
+    });
+
+    expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
+      workspaces: [
+        {
+          id: created.workspace.id,
+          name: "Shared work",
+          projectIds: ["proj_base", "proj_landing", "proj_linux"],
+          threadIds: ["thr_base", "thr_linux"],
+        },
+      ],
+    });
+
     await harness.lifecycle.dispose();
   });
 });
