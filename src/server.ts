@@ -152,6 +152,15 @@ export const t3sidebarRpcContract = defineRpcContract({
     }),
     output: z.object({ workspace: workspaceSchema }),
   },
+  setWorkspaceThreadMembership: {
+    input: z.object({
+      workspaceId: z.string().trim().min(1),
+      projectId: z.string().trim().min(1),
+      threadId: z.string().trim().min(1),
+      included: z.boolean(),
+    }),
+    output: z.object({ workspace: workspaceSchema }),
+  },
   deleteWorkspace: {
     input: workspaceIdSchema,
     output: z.object({ ok: z.boolean() }),
@@ -273,6 +282,50 @@ export default function plugin(bb: BbPluginApi) {
       projectIds: JSON.parse(row.project_ids) as string[],
       threadIds: JSON.parse(row.thread_ids) as string[],
     }));
+
+  const setWorkspaceThreadMembership = db.transaction(
+    (
+      workspaceId: string,
+      projectId: string,
+      threadId: string,
+      included: boolean,
+    ): StoredWorkspace => {
+      const row = db
+        .prepare(
+          `SELECT id, name, project_ids, thread_ids
+             FROM workspaces
+            WHERE id = ?`,
+        )
+        .get(workspaceId) as WorkspaceDbRow | undefined;
+      if (!row) throw new Error("Workspace not found.");
+
+      const projectIds = new Set(JSON.parse(row.project_ids) as string[]);
+      const threadIds = new Set(JSON.parse(row.thread_ids) as string[]);
+      if (included) {
+        projectIds.add(projectId);
+        threadIds.add(threadId);
+      } else {
+        threadIds.delete(threadId);
+      }
+
+      const workspace: StoredWorkspace = {
+        id: row.id,
+        name: row.name,
+        projectIds: [...projectIds],
+        threadIds: [...threadIds],
+      };
+      db.prepare(
+        `UPDATE workspaces
+            SET project_ids = ?, thread_ids = ?
+          WHERE id = ?`,
+      ).run(
+        JSON.stringify(workspace.projectIds),
+        JSON.stringify(workspace.threadIds),
+        workspace.id,
+      );
+      return workspace;
+    },
+  );
 
   const publishWorkspace = (workspaceId: string): void => {
     bb.realtime.publish(WORKSPACES_CHANNEL, { workspaceId });
@@ -417,6 +470,21 @@ export default function plugin(bb: BbPluginApi) {
           );
         if (result.changes === 0) throw new Error("Workspace not found.");
       }
+      publishWorkspace(workspace.id);
+      return { workspace };
+    },
+    async setWorkspaceThreadMembership({
+      workspaceId,
+      projectId,
+      threadId,
+      included,
+    }) {
+      const workspace = setWorkspaceThreadMembership(
+        workspaceId,
+        projectId,
+        threadId,
+        included,
+      );
       publishWorkspace(workspace.id);
       return { workspace };
     },

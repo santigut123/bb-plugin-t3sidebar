@@ -167,6 +167,56 @@ describe("workspace RPC", () => {
 
     await harness.lifecycle.dispose();
   });
+
+  it("updates one thread membership without replacing concurrent workspace changes", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3sidebar",
+      sdk: {
+        subscribe: () => () => {},
+        threads: { events: { list: async () => [] } },
+      },
+    });
+    await plugin(bb);
+
+    const created = (await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "Shared work",
+      projectIds: ["proj_base"],
+      threadIds: ["thr_base"],
+    })) as { workspace: { id: string } };
+
+    await harness.behavior.callRpc("setWorkspaceThreadMembership", {
+      workspaceId: created.workspace.id,
+      projectId: "proj_landing",
+      threadId: "thr_landing",
+      included: true,
+    });
+    await harness.behavior.callRpc("setWorkspaceThreadMembership", {
+      workspaceId: created.workspace.id,
+      projectId: "proj_linux",
+      threadId: "thr_linux",
+      included: true,
+    });
+    await harness.behavior.callRpc("setWorkspaceThreadMembership", {
+      workspaceId: created.workspace.id,
+      projectId: "proj_landing",
+      threadId: "thr_landing",
+      included: false,
+    });
+
+    expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
+      workspaces: [
+        {
+          id: created.workspace.id,
+          name: "Shared work",
+          projectIds: ["proj_base", "proj_landing", "proj_linux"],
+          threadIds: ["thr_base", "thr_linux"],
+        },
+      ],
+    });
+
+    await harness.lifecycle.dispose();
+  });
 });
 
 describe("turn start RPC", () => {
