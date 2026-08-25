@@ -26,6 +26,10 @@ const migrations = [
    )`,
   `ALTER TABLE workspaces
      ADD COLUMN thread_ids TEXT NOT NULL DEFAULT '[]'`,
+  `CREATE TABLE IF NOT EXISTS thread_work_order (
+     thread_id  TEXT PRIMARY KEY,
+     started_at INTEGER NOT NULL
+   )`,
 ];
 
 export interface StoredLifecycleRow {
@@ -66,6 +70,11 @@ interface WorkspaceDbRow {
   thread_ids: string;
 }
 
+interface WorkOrderDbRow {
+  thread_id: string;
+  started_at: number;
+}
+
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
 const projectIdSchema = z.object({ projectId: z.string().trim().min(1) });
 const hueSchema = z.number().int().min(0).max(359);
@@ -89,6 +98,17 @@ export const t3sidebarRpcContract = defineRpcContract({
         z.object({
           threadId: z.string(),
           startedAt: z.number().nullable(),
+        }),
+      ),
+    }),
+  },
+  listWorkOrder: {
+    input: z.object({}),
+    output: z.object({
+      rows: z.array(
+        z.object({
+          threadId: z.string(),
+          startedAt: z.number(),
         }),
       ),
     }),
@@ -171,6 +191,7 @@ export const t3sidebarRpcContract = defineRpcContract({
 export const LIFECYCLE_CHANNEL = "lifecycle";
 export const PROJECT_COLORS_CHANNEL = "project-colors";
 export const TURN_STARTS_CHANNEL = "turn-starts";
+export const WORK_ORDER_CHANNEL = "work-order";
 export const WORKSPACES_CHANNEL = "workspaces";
 
 export const t3sidebarSettings = {
@@ -263,6 +284,20 @@ export default function plugin(bb: BbPluginApi) {
       hue: row.hue,
     }));
 
+  const readWorkOrder = () =>
+    (
+      db
+        .prepare(
+          `SELECT thread_id, started_at
+             FROM thread_work_order
+            ORDER BY started_at DESC, thread_id`,
+        )
+        .all() as WorkOrderDbRow[]
+    ).map((row) => ({
+      threadId: row.thread_id,
+      startedAt: row.started_at,
+    }));
+
   const publishProjectColors = (projectId: string): void => {
     bb.realtime.publish(PROJECT_COLORS_CHANNEL, { projectId });
   };
@@ -343,15 +378,33 @@ export default function plugin(bb: BbPluginApi) {
     return latest?.type === "turn/started" ? latest.createdAt : null;
   };
 
+  const recordWorkStarted = (threadId: string, startedAt: number): void => {
+    const result = db
+      .prepare(
+        `INSERT INTO thread_work_order (thread_id, started_at)
+         VALUES (?, ?)
+         ON CONFLICT(thread_id) DO UPDATE SET started_at = excluded.started_at
+         WHERE excluded.started_at > thread_work_order.started_at`,
+      )
+      .run(threadId, startedAt);
+    if (result.changes > 0) {
+      bb.realtime.publish(WORK_ORDER_CHANNEL, { threadId, startedAt });
+    }
+  };
+
   bb.rpc.register(t3sidebarRpcContract, {
     async listTurnStarts({ threadIds }) {
       const rows = await Promise.all(
         [...new Set(threadIds)].map(async (threadId) => {
           const startedAt = await activeTurnStartedAt(threadId);
+          if (startedAt !== null) recordWorkStarted(threadId, startedAt);
           return { threadId, startedAt };
         }),
       );
       return { rows };
+    },
+    async listWorkOrder() {
+      return { rows: readWorkOrder() };
     },
     async listLifecycle() {
       return { rows: readAll() };
@@ -509,6 +562,7 @@ export default function plugin(bb: BbPluginApi) {
       void activeTurnStartedAt(threadId)
         .then((startedAt) => {
           if (!disposed && startedAt !== null) {
+            recordWorkStarted(threadId, startedAt);
             bb.realtime.publish(TURN_STARTS_CHANNEL, { threadId, startedAt });
           }
         })
@@ -520,6 +574,9 @@ export default function plugin(bb: BbPluginApi) {
   // thread reusing the id, and stale rows accumulate otherwise.
   bb.events.on("thread.deleted", ({ thread }) => {
     clear(thread.id);
+    db.prepare(`DELETE FROM thread_work_order WHERE thread_id = ?`).run(
+      thread.id,
+    );
   });
 
   bb.onDispose(() => {

@@ -35,10 +35,11 @@ selected is added to that workspace automatically.
 
 ## The idea
 
-Root threads never re-order themselves. They sort by creation time, newest
-first, while descendants stay directly beneath their parent until parked.
-Status lives inside each card instead of in its position, so no row slides away
-under your cursor because an agent finished something.
+Pinned threads stay above the rest. When an unpinned thread starts working, its
+whole family moves to the top of the inbox and stays there after the work
+finishes, until another family starts working. Descendants remain directly
+beneath their parent, so activity never breaks the thread hierarchy. Threads
+that have not worked yet use creation time, newest first.
 
 Three shelves:
 
@@ -64,7 +65,8 @@ Three shelves:
 
 Child threads sit directly beneath their parent as staggered rows with a subtle
 left guide. Parent rows show a child-count toggle; children start expanded and
-can be collapsed as a group. Orphans stay in the root creation order. Two chips
+can be collapsed as a group. Orphans remain root rows and participate in the
+same activity order. Two chips
 in the thread header provide quicker navigation:
 
 - On a parent: a chip with one coloured disc per child. It opens the list of
@@ -90,7 +92,7 @@ root row, and its header shows no parent chip.
 | `experimental_useSidebarThreadSplit`               | dragging a card out to a split pane                                                         |
 | `experimental_useSidebarThreadPullRequest`         | the `#412` badge, coloured by bb's attention state                                          |
 | `@radix-ui/react-context-menu` (shimmed)           | this plugin's own right-click menu, built on the action hook                                |
-| `bb.storage.database()` + `bb.rpc` + `bb.realtime` | settled/snoozed state and named project/thread workspaces                                   |
+| `bb.storage.database()` + `bb.rpc` + `bb.realtime` | settled/snoozed state, activity order, and named project/thread workspaces                   |
 
 The plugin API ships **no components**. Status glyphs and the right-click menu
 are both this plugin's own: `indicator` arrives as data, and every menu item is

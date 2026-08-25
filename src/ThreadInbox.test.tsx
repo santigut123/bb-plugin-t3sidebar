@@ -69,6 +69,7 @@ function testRpc(
     listLifecycle: () => ({ rows: [] }),
     listProjectColors: () => ({ rows: [] }),
     listTurnStarts: () => ({ rows: [] }),
+    listWorkOrder: () => ({ rows: [] }),
     listWorkspaces: () => ({ workspaces: [] }),
     ...overrides,
   };
@@ -145,6 +146,59 @@ describe("ThreadInbox", () => {
     ]);
     expect(screen.getByText("Child").closest("li")?.className).toContain(
       "ml-4",
+    );
+  });
+
+  it("keeps pinned threads first and bumps a recently working family", async () => {
+    let workRows: Array<{ threadId: string; startedAt: number }> = [];
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "pinned", title: "Pinned", isPinned: true }),
+          thread({ id: "parent", title: "Parent", createdAt: 1 }),
+          thread({
+            id: "child",
+            title: "Working child",
+            parentThreadId: "parent",
+            createdAt: 3,
+          }),
+          thread({ id: "newer", title: "Newer root", createdAt: 10 }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkOrder: () => ({ rows: workRows }),
+      }),
+      settings: testSettings(),
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("listitem").map((row) => row.textContent),
+      ).toEqual([
+        expect.stringContaining("Pinned"),
+        expect.stringContaining("Newer root"),
+        expect.stringContaining("Parent"),
+        expect.stringContaining("Working child"),
+      ]),
+    );
+
+    workRows = [{ threadId: "child", startedAt: 50 }];
+    await rendered.behavior.emitRealtime("work-order", {
+      threadId: "child",
+      startedAt: 50,
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("listitem").map((row) => row.textContent),
+      ).toEqual([
+        expect.stringContaining("Pinned"),
+        expect.stringContaining("Parent"),
+        expect.stringContaining("Working child"),
+        expect.stringContaining("Newer root"),
+      ]),
     );
   });
 

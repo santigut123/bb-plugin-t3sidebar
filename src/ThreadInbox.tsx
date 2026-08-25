@@ -35,6 +35,7 @@ import {
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import { statusPresentation } from "./StatusGlyph";
 import { useTurnStarts } from "./useTurnStarts";
+import { useWorkOrder } from "./useWorkOrder";
 import { WorkspaceTabs } from "./WorkspaceTabs";
 import { useWorkspaces } from "./useWorkspaces";
 import {
@@ -50,7 +51,7 @@ import {
 const ALL_PROJECTS = "__all__";
 
 /**
- * The sidebar's scrolling list: stable root cards with descendants beneath.
+ * The sidebar's scrolling list: recently working families with descendants beneath.
  *
  * The host owns the New-thread button and the search field above it, so this
  * ships neither. It filters by the `searchQuery` prop and adds the controls
@@ -65,6 +66,7 @@ export function ThreadInbox({
   const actions = useSidebarThreadActions();
   const lifecycle = useLifecycle(threads);
   const projectColors = useProjectColors();
+  const workOrder = useWorkOrder();
   const workspaces = useWorkspaces();
   const { values: settingsValues } = useSettings();
   const workingShimmer = parseWorkingShimmerVariant(
@@ -201,8 +203,8 @@ export function ThreadInbox({
     }
     const split = partitionPinned(active);
     return {
-      pinned: sortByThreadHierarchy(split.pinned),
-      inbox: sortByThreadHierarchy(split.inbox),
+      pinned: sortByThreadHierarchy(split.pinned, workOrder),
+      inbox: sortByThreadHierarchy(split.inbox, workOrder),
       // Soonest wake first: "what comes back next" is the shelf's question.
       snoozed: [...onSnoozeShelf].sort(
         (left, right) =>
@@ -210,7 +212,14 @@ export function ThreadInbox({
       ),
       settled: sortByCreatedAtDescending(onSettledShelf),
     };
-  }, [effectiveScope, lifecycle, searchQuery, threads, workspaceThreadIds]);
+  }, [
+    effectiveScope,
+    lifecycle,
+    searchQuery,
+    threads,
+    workOrder,
+    workspaceThreadIds,
+  ]);
 
   const displayedPinned = hideCollapsedDescendants(
     pinned,

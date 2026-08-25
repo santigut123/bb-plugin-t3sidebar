@@ -13,6 +13,9 @@
 
 ### Changed
 
+- When a thread starts working, its unpinned parent/child family moves to the
+  top of the inbox and keeps that position after finishing. Pinned threads
+  remain above it.
 - Settling a parent thread now settles its full child subtree with it.
 - Child threads now remain visible directly beneath their parent as staggered,
   collapsible sidebar rows while retaining the parent and children header

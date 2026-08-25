@@ -1,13 +1,6 @@
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 
-/**
- * The sort that defines this sidebar: newest thread on top, and NOTHING moves
- * it afterwards. Activity never re-orders the list, so a row holds its place
- * from creation until you park it and the screen only changes when you act.
- * Status is carried by the card, not by position.
- *
- * Ties break on id so the order is total and stable across renders.
- */
+/** Newest-first baseline order. Ties break on id for stable renders. */
 export function sortByCreatedAtDescending<
   T extends { readonly id: string; readonly createdAt: number },
 >(threads: readonly T[]): T[] {
@@ -17,14 +10,21 @@ export function sortByCreatedAtDescending<
   );
 }
 
-/** Root threads stay newest-first; each descendant follows its parent. */
+/**
+ * Recently working families come first. A descendant bumps its whole ancestry,
+ * while every descendant remains directly beneath its parent.
+ */
 export function sortByThreadHierarchy<
   T extends {
     readonly id: string;
     readonly parentThreadId: string | null;
     readonly createdAt: number;
   },
->(threads: readonly T[]): T[] {
+>(
+  threads: readonly T[],
+  workStartedAt: ReadonlyMap<string, number> = new Map(),
+): T[] {
+  const byId = new Map(threads.map((thread) => [thread.id, thread]));
   const ids = new Set(threads.map((thread) => thread.id));
   const children = new Map<string, T[]>();
   const roots: T[] = [];
@@ -43,8 +43,39 @@ export function sortByThreadHierarchy<
     }
   }
 
+  const familyStartedAt = new Map<string, number>();
+  for (const [threadId, startedAt] of workStartedAt) {
+    let thread = byId.get(threadId);
+    const visited = new Set<string>();
+    while (thread && !visited.has(thread.id)) {
+      visited.add(thread.id);
+      familyStartedAt.set(
+        thread.id,
+        Math.max(familyStartedAt.get(thread.id) ?? 0, startedAt),
+      );
+      thread = thread.parentThreadId
+        ? byId.get(thread.parentThreadId)
+        : undefined;
+    }
+  }
+
+  const compareFamilies = (left: T, right: T): number => {
+    const leftStartedAt = familyStartedAt.get(left.id);
+    const rightStartedAt = familyStartedAt.get(right.id);
+    if (leftStartedAt !== undefined || rightStartedAt !== undefined) {
+      if (leftStartedAt === undefined) return 1;
+      if (rightStartedAt === undefined) return -1;
+      if (leftStartedAt !== rightStartedAt) {
+        return rightStartedAt - leftStartedAt;
+      }
+    }
+    return (
+      right.createdAt - left.createdAt || left.id.localeCompare(right.id)
+    );
+  };
+
   for (const [parentId, siblings] of children) {
-    children.set(parentId, sortByCreatedAtDescending(siblings));
+    children.set(parentId, [...siblings].sort(compareFamilies));
   }
 
   const result: T[] = [];
@@ -60,9 +91,9 @@ export function sortByThreadHierarchy<
     }
   };
 
-  sortByCreatedAtDescending(roots).forEach(appendFamily);
+  [...roots].sort(compareFamilies).forEach(appendFamily);
   // Keep malformed cycles reachable rather than silently dropping rows.
-  sortByCreatedAtDescending(threads).forEach(appendFamily);
+  [...threads].sort(compareFamilies).forEach(appendFamily);
   return result;
 }
 

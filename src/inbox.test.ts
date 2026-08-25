@@ -157,6 +157,28 @@ describe("filtering", () => {
 });
 
 describe("child threads", () => {
+  it("bumps the most recently working family while keeping its hierarchy", () => {
+    const ordered = sortByThreadHierarchy(
+      [
+        thread({ id: "parent", createdAt: 1 }),
+        thread({ id: "older-child", parentThreadId: "parent", createdAt: 2 }),
+        thread({ id: "working-child", parentThreadId: "parent", createdAt: 3 }),
+        thread({ id: "newer-root", createdAt: 10 }),
+      ],
+      new Map([
+        ["working-child", 50],
+        ["newer-root", 40],
+      ]),
+    );
+
+    expect(ordered.map((item) => item.id)).toEqual([
+      "parent",
+      "working-child",
+      "older-child",
+      "newer-root",
+    ]);
+  });
+
   it("places descendants directly after their parent", () => {
     expect(
       sortByThreadHierarchy([

@@ -3,7 +3,11 @@ import {
   createFakePluginHost,
   makeThreadResponse,
 } from "@get-bb/plugin-sdk/testing";
-import plugin, { TURN_STARTS_CHANNEL, WORKSPACES_CHANNEL } from "./server";
+import plugin, {
+  TURN_STARTS_CHANNEL,
+  WORK_ORDER_CHANNEL,
+  WORKSPACES_CHANNEL,
+} from "./server";
 
 function turnStartedEvent(threadId: string, createdAt: number) {
   return {
@@ -248,6 +252,66 @@ describe("workspace RPC", () => {
 });
 
 describe("turn start RPC", () => {
+  it("keeps the latest work start after the turn completes", async () => {
+    let latestEvent:
+      | ReturnType<typeof turnStartedEvent>
+      | ReturnType<typeof turnCompletedEvent> = turnStartedEvent(
+      "thr_working",
+      40_000,
+    );
+    let onThreadChanged:
+      | ((event: {
+          type: "changed";
+          entity: "thread";
+          id: string;
+          changes: ["events-appended"];
+          metadata: { eventTypes: ["turn/started"] };
+        }) => void)
+      | undefined;
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3sidebar",
+      sdk: {
+        subscribe: ({ callback }) => {
+          onThreadChanged = callback as typeof onThreadChanged;
+          return () => {};
+        },
+        threads: {
+          events: {
+            list: async () => [latestEvent],
+          },
+        },
+      },
+    });
+    await plugin(bb);
+
+    onThreadChanged?.({
+      type: "changed",
+      entity: "thread",
+      id: "thr_working",
+      changes: ["events-appended"],
+      metadata: { eventTypes: ["turn/started"] },
+    });
+    await vi.waitFor(async () =>
+      expect(await harness.behavior.callRpc("listWorkOrder", {})).toEqual({
+        rows: [{ threadId: "thr_working", startedAt: 40_000 }],
+      }),
+    );
+
+    latestEvent = turnCompletedEvent("thr_working", 50_000);
+    expect(
+      await harness.behavior.callRpc("listTurnStarts", {
+        threadIds: ["thr_working"],
+      }),
+    ).toEqual({
+      rows: [{ threadId: "thr_working", startedAt: null }],
+    });
+    expect(await harness.behavior.callRpc("listWorkOrder", {})).toEqual({
+      rows: [{ threadId: "thr_working", startedAt: 40_000 }],
+    });
+
+    await harness.lifecycle.dispose();
+  });
+
   it("returns the latest turn start for each unique requested thread", async () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "t3sidebar",
@@ -370,6 +434,10 @@ describe("turn start RPC", () => {
     });
     await vi.waitFor(() =>
       expect(harness.inspection.realtimeSignals).toEqual([
+        {
+          channel: WORK_ORDER_CHANNEL,
+          payload: { threadId: "thr_working", startedAt: 30_000 },
+        },
         {
           channel: TURN_STARTS_CHANNEL,
           payload: { threadId: "thr_working", startedAt: 30_000 },
