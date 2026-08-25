@@ -305,6 +305,75 @@ describe("ThreadInbox", () => {
     expect(screen.queryByText("Hero copy")).toBeNull();
   });
 
+  it("adds a newly appearing thread to the active workspace", async () => {
+    const visibleThreads = [
+      thread({ id: "thr_existing", title: "Existing thread" }),
+    ];
+    let workspaces = [
+      {
+        id: "workspace_landing",
+        name: "Landing",
+        projectIds: [] as string[],
+        threadIds: [] as string[],
+      },
+    ];
+    let membership:
+      | {
+          workspaceId: string;
+          projectId: string;
+          threadId: string;
+          included: boolean;
+        }
+      | undefined;
+    const slot = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: visibleThreads,
+        projects: [
+          { id: "proj_1", name: "bb", isPersonal: false },
+          { id: "proj_2", name: "landing", isPersonal: false },
+        ],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces }),
+        setWorkspaceThreadMembership: (input) => {
+          membership = input as typeof membership;
+          const workspace = {
+            ...workspaces[0]!,
+            projectIds: [membership!.projectId],
+            threadIds: [membership!.threadId],
+          };
+          workspaces = [workspace];
+          return { workspace };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Landing" }));
+    expect(membership).toBeUndefined();
+
+    visibleThreads.push(
+      thread({
+        id: "thr_new",
+        projectId: "proj_2",
+        title: "New landing thread",
+      }),
+    );
+    const Inbox = inbox.component;
+    slot.lifecycle.rerender(<Inbox {...listProps} />);
+
+    await waitFor(() =>
+      expect(membership).toEqual({
+        workspaceId: "workspace_landing",
+        projectId: "proj_2",
+        threadId: "thr_new",
+        included: true,
+      }),
+    );
+    expect(await screen.findByText("New landing thread")).toBeDefined();
+  });
+
   it("does not include a project's threads until they are selected", async () => {
     renderSlot(inbox, listProps, {
       sidebarThreads: {

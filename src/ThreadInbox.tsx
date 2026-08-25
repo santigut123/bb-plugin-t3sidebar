@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
@@ -89,6 +89,9 @@ export function ThreadInbox({
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(
     null,
   );
+  const [workspaceMembershipError, setWorkspaceMembershipError] = useState<
+    string | null
+  >(null);
   // One clock for every card in a render, quantized to the minute so the
   // labels do not disagree and do not churn on unrelated re-renders.
   const [nowMinute, setNowMinute] = useState(() =>
@@ -117,6 +120,42 @@ export function ThreadInbox({
     workspaces.workspaces.find(
       (workspace) => workspace.id === activeWorkspaceId,
     ) ?? null;
+  // The host owns thread creation, so capture additions from its live list.
+  // Seed once to avoid absorbing every existing thread when the plugin mounts.
+  const seenThreadIds = useRef<Set<string> | null>(null);
+  const threadIdsKey = JSON.stringify(threads.map((thread) => thread.id));
+  useEffect(() => {
+    if (status !== "ready") return;
+
+    if (seenThreadIds.current === null) {
+      seenThreadIds.current = new Set(threads.map((thread) => thread.id));
+      return;
+    }
+
+    const seen = seenThreadIds.current;
+    const newThreads = threads.filter((thread) => !seen.has(thread.id));
+    newThreads.forEach((thread) => seen.add(thread.id));
+    if (activeWorkspace === null) return;
+
+    const unassignedThreads = newThreads.filter(
+      (thread) => !activeWorkspace.threadIds.includes(thread.id),
+    );
+    if (unassignedThreads.length === 0) return;
+
+    setWorkspaceMembershipError(null);
+    void Promise.all(
+      unassignedThreads.map((thread) =>
+        workspaces.setThreadMembership({
+          workspaceId: activeWorkspace.id,
+          projectId: thread.projectId,
+          threadId: thread.id,
+          included: true,
+        }),
+      ),
+    ).catch(() =>
+      setWorkspaceMembershipError("Could not add new thread to workspace."),
+    );
+  }, [activeWorkspace, status, threadIdsKey, threads, workspaces]);
   const workspaceProjectIds = useMemo(
     () =>
       activeWorkspace === null ? null : new Set(activeWorkspace.projectIds),
@@ -261,6 +300,11 @@ export function ThreadInbox({
         threads={threads}
         workspaces={workspaces}
       />
+      {workspaceMembershipError ? (
+        <p role="alert" className="px-3 py-1 text-xs text-destructive-text">
+          {workspaceMembershipError}
+        </p>
+      ) : null}
       {/* Everything else in the chrome above — New thread, search — is bb's
           and stays bb's. */}
       <div className="flex shrink-0 items-center gap-1 px-2 pb-1">

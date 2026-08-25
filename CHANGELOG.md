@@ -24,6 +24,8 @@
 
 ### Fixed
 
+- New threads now appear automatically in the workspace that was selected
+  when they were created.
 - Workspaces can now be created empty, without selecting projects or threads.
 - Workspace membership updates now compose safely across multiple bb tabs and
   report failures without closing the thread context menu.

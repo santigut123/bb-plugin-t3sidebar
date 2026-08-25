@@ -30,7 +30,8 @@ to create one, then right-click its tab to rename it, change its projects or
 threads, or delete it. You can also right-click any thread and use
 **Workspaces** to add or remove it directly. Click the selected workspace
 again to return to the all-threads view. Workspace names and membership are
-stored in the plugin's SQLite database.
+stored in the plugin's SQLite database. A thread created while a workspace is
+selected is added to that workspace automatically.
 
 ## The idea
 
