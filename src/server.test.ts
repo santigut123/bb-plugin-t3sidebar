@@ -253,12 +253,6 @@ describe("workspace RPC", () => {
 
 describe("turn start RPC", () => {
   it("keeps the latest work start after the turn completes", async () => {
-    let latestEvent:
-      | ReturnType<typeof turnStartedEvent>
-      | ReturnType<typeof turnCompletedEvent> = turnStartedEvent(
-      "thr_working",
-      40_000,
-    );
     let onThreadChanged:
       | ((event: {
           type: "changed";
@@ -277,7 +271,10 @@ describe("turn start RPC", () => {
         },
         threads: {
           events: {
-            list: async () => [latestEvent],
+            list: async ({ types }) =>
+              types?.length === 1 && types[0] === "turn/started"
+                ? [turnStartedEvent("thr_working", 40_000)]
+                : [turnCompletedEvent("thr_working", 50_000)],
           },
         },
       },
@@ -292,12 +289,15 @@ describe("turn start RPC", () => {
       metadata: { eventTypes: ["turn/started"] },
     });
     await vi.waitFor(async () =>
-      expect(await harness.behavior.callRpc("listWorkOrder", {})).toEqual({
+      expect(
+        await harness.behavior.callRpc("listWorkOrder", {
+          threadIds: ["thr_working"],
+        }),
+      ).toEqual({
         rows: [{ threadId: "thr_working", startedAt: 40_000 }],
       }),
     );
 
-    latestEvent = turnCompletedEvent("thr_working", 50_000);
     expect(
       await harness.behavior.callRpc("listTurnStarts", {
         threadIds: ["thr_working"],
@@ -305,9 +305,18 @@ describe("turn start RPC", () => {
     ).toEqual({
       rows: [{ threadId: "thr_working", startedAt: null }],
     });
-    expect(await harness.behavior.callRpc("listWorkOrder", {})).toEqual({
+    expect(
+      await harness.behavior.callRpc("listWorkOrder", {
+        threadIds: ["thr_working"],
+      }),
+    ).toEqual({
       rows: [{ threadId: "thr_working", startedAt: 40_000 }],
     });
+    expect(
+      await harness.behavior.callRpc("listWorkOrder", {
+        threadIds: ["thr_other"],
+      }),
+    ).toEqual({ rows: [] });
 
     await harness.lifecycle.dispose();
   });

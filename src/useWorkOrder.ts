@@ -6,8 +6,12 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import type { t3sidebarRpcContract } from "./server";
 
+const WORK_ORDER_BATCH_SIZE = 500;
+
 /** Durable last-work-start timestamps used to order thread families. */
-export function useWorkOrder(): ReadonlyMap<string, number> {
+export function useWorkOrder(
+  threadIds: readonly string[],
+): ReadonlyMap<string, number> {
   const rpc = useRpc<typeof t3sidebarRpcContract>();
   const connectionState = useRealtimeConnectionState();
   const [workStartedAt, setWorkStartedAt] = useState<
@@ -15,19 +19,41 @@ export function useWorkOrder(): ReadonlyMap<string, number> {
   >(() => new Map());
   const requestSeq = useRef(0);
   const previousConnectionState = useRef(connectionState);
+  const threadIdsRef = useRef(threadIds);
+  threadIdsRef.current = threadIds;
+  const membershipKey = JSON.stringify([...new Set(threadIds)].sort());
 
   const refresh = useCallback(async () => {
     const seq = ++requestSeq.current;
+    const uniqueThreadIds = [...new Set(threadIdsRef.current)];
+    if (uniqueThreadIds.length === 0) {
+      setWorkStartedAt(new Map());
+      return;
+    }
     try {
-      const result = await rpc.call("listWorkOrder", {});
+      const results = await Promise.all(
+        Array.from(
+          { length: Math.ceil(uniqueThreadIds.length / WORK_ORDER_BATCH_SIZE) },
+          (_, index) =>
+            rpc.call("listWorkOrder", {
+              threadIds: uniqueThreadIds.slice(
+                index * WORK_ORDER_BATCH_SIZE,
+                (index + 1) * WORK_ORDER_BATCH_SIZE,
+              ),
+            }),
+        ),
+      );
       if (seq !== requestSeq.current) return;
       setWorkStartedAt(
-        new Map(result.rows.map((row) => [row.threadId, row.startedAt])),
+        new Map(
+          results.flatMap((result) => result.rows)
+            .map((row) => [row.threadId, row.startedAt] as const),
+        ),
       );
     } catch {
       // A transient refresh failure must not reshuffle an already ordered list.
     }
-  }, [rpc]);
+  }, [membershipKey, rpc]);
 
   useEffect(() => {
     void refresh();

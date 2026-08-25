@@ -56,7 +56,11 @@ export function ThreadInbox({
   const actions = useSidebarThreadActions();
   const lifecycle = useLifecycle(threads);
   const projectColors = useProjectColors();
-  const workOrder = useWorkOrder();
+  const workOrderThreadIds = useMemo(
+    () => visibleInboxThreads(threads).map((thread) => thread.id),
+    [threads],
+  );
+  const workOrder = useWorkOrder(workOrderThreadIds);
   const workspaces = useWorkspaces();
   const { values: settingsValues } = useSettings();
   const workingShimmer = parseWorkingShimmerVariant(
@@ -114,6 +118,13 @@ export function ThreadInbox({
   // The host owns thread creation, so capture additions from its live list.
   // Seed once to avoid absorbing every existing thread when the plugin mounts.
   const seenThreadIds = useRef<Set<string> | null>(null);
+  const pendingWorkspaceAssignments = useRef(
+    new Map<
+      string,
+      { workspaceId: string; projectId: string; threadId: string }
+    >(),
+  );
+  const workspaceAssignmentsInFlight = useRef(new Set<string>());
   const threadIdsKey = JSON.stringify(threads.map((thread) => thread.id));
   useEffect(() => {
     if (status !== "ready") return;
@@ -126,26 +137,58 @@ export function ThreadInbox({
     const seen = seenThreadIds.current;
     const newThreads = threads.filter((thread) => !seen.has(thread.id));
     newThreads.forEach((thread) => seen.add(thread.id));
-    if (activeWorkspace === null) return;
+    if (activeWorkspace !== null) {
+      newThreads
+        .filter((thread) => !activeWorkspace.threadIds.includes(thread.id))
+        .forEach((thread) =>
+          pendingWorkspaceAssignments.current.set(thread.id, {
+            workspaceId: activeWorkspace.id,
+            projectId: thread.projectId,
+            threadId: thread.id,
+          }),
+        );
+    }
 
-    const unassignedThreads = newThreads.filter(
-      (thread) => !activeWorkspace.threadIds.includes(thread.id),
+    const workspaceById = new Map(
+      workspaces.workspaces.map((workspace) => [workspace.id, workspace]),
     );
-    if (unassignedThreads.length === 0) return;
+    const currentThreadIds = new Set(threads.map((thread) => thread.id));
+    const assignments = [
+      ...pendingWorkspaceAssignments.current.values(),
+    ].filter((assignment) => {
+      const workspace = workspaceById.get(assignment.workspaceId);
+      if (
+        !workspace ||
+        !currentThreadIds.has(assignment.threadId) ||
+        workspace.threadIds.includes(assignment.threadId)
+      ) {
+        pendingWorkspaceAssignments.current.delete(assignment.threadId);
+        return false;
+      }
+      return !workspaceAssignmentsInFlight.current.has(assignment.threadId);
+    });
+    if (assignments.length === 0) return;
 
     setWorkspaceMembershipError(null);
-    void Promise.all(
-      unassignedThreads.map((thread) =>
-        workspaces.setThreadMembership({
-          workspaceId: activeWorkspace.id,
-          projectId: thread.projectId,
-          threadId: thread.id,
+    assignments.forEach((assignment) => {
+      workspaceAssignmentsInFlight.current.add(assignment.threadId);
+      void workspaces
+        .setThreadMembership({
+          workspaceId: assignment.workspaceId,
+          projectId: assignment.projectId,
+          threadId: assignment.threadId,
           included: true,
-        }),
-      ),
-    ).catch(() =>
-      setWorkspaceMembershipError("Could not add new thread to workspace."),
-    );
+        })
+        .then(() =>
+          pendingWorkspaceAssignments.current.delete(assignment.threadId),
+        )
+        .catch(() =>
+          setWorkspaceMembershipError("Could not add new thread to workspace."),
+        )
+        .finally(() =>
+          workspaceAssignmentsInFlight.current.delete(assignment.threadId),
+        );
+    });
   }, [activeWorkspace, status, threadIdsKey, threads, workspaces]);
   const workspaceThreadIds = useMemo(
     () => (activeWorkspace === null ? null : new Set(activeWorkspace.threadIds)),

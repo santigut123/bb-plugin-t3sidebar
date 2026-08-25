@@ -141,15 +141,47 @@ export function visibleInboxThreads(
   return threads.filter((thread) => !thread.isArchived);
 }
 
-/** Pinned first (they are the user's own ordering), then the static sort. */
+/**
+ * Keep every visible parent/child family on one shelf. If any family member is
+ * pinned, the whole family belongs on the pinned shelf so hierarchy is intact.
+ */
 export function partitionPinned(threads: readonly PluginSidebarThread[]): {
   pinned: PluginSidebarThread[];
   inbox: PluginSidebarThread[];
 } {
+  const byId = new Map(threads.map((thread) => [thread.id, thread]));
+  const neighbors = new Map(
+    threads.map((thread) => [thread.id, [] as string[]]),
+  );
+  for (const thread of threads) {
+    const parentId = thread.parentThreadId;
+    if (!parentId || parentId === thread.id || !byId.has(parentId)) continue;
+    neighbors.get(thread.id)!.push(parentId);
+    neighbors.get(parentId)!.push(thread.id);
+  }
+
+  const pinnedIds = new Set<string>();
+  const visited = new Set<string>();
+  for (const thread of threads) {
+    if (visited.has(thread.id)) continue;
+    const family: string[] = [];
+    const stack = [thread.id];
+    let familyIsPinned = false;
+    while (stack.length > 0) {
+      const threadId = stack.pop()!;
+      if (visited.has(threadId)) continue;
+      visited.add(threadId);
+      family.push(threadId);
+      familyIsPinned ||= byId.get(threadId)?.isPinned === true;
+      stack.push(...(neighbors.get(threadId) ?? []));
+    }
+    if (familyIsPinned) family.forEach((threadId) => pinnedIds.add(threadId));
+  }
+
   const pinned: PluginSidebarThread[] = [];
   const inbox: PluginSidebarThread[] = [];
   for (const thread of threads) {
-    (thread.isPinned ? pinned : inbox).push(thread);
+    (pinnedIds.has(thread.id) ? pinned : inbox).push(thread);
   }
   return { pinned, inbox };
 }

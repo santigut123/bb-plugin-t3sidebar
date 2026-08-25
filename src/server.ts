@@ -103,7 +103,9 @@ export const t3sidebarRpcContract = defineRpcContract({
     }),
   },
   listWorkOrder: {
-    input: z.object({}),
+    input: z.object({
+      threadIds: z.array(z.string().trim().min(1)).max(500),
+    }),
     output: z.object({
       rows: z.array(
         z.object({
@@ -284,19 +286,26 @@ export default function plugin(bb: BbPluginApi) {
       hue: row.hue,
     }));
 
-  const readWorkOrder = () =>
-    (
+  const readWorkOrder = (
+    threadIds: readonly string[],
+  ): Array<{ threadId: string; startedAt: number }> => {
+    const uniqueThreadIds = [...new Set(threadIds)];
+    if (uniqueThreadIds.length === 0) return [];
+    const placeholders = uniqueThreadIds.map(() => "?").join(", ");
+    return (
       db
         .prepare(
           `SELECT thread_id, started_at
              FROM thread_work_order
+            WHERE thread_id IN (${placeholders})
             ORDER BY started_at DESC, thread_id`,
         )
-        .all() as WorkOrderDbRow[]
+        .all(...uniqueThreadIds) as WorkOrderDbRow[]
     ).map((row) => ({
       threadId: row.thread_id,
       startedAt: row.started_at,
     }));
+  };
 
   const publishProjectColors = (projectId: string): void => {
     bb.realtime.publish(PROJECT_COLORS_CHANNEL, { projectId });
@@ -378,6 +387,18 @@ export default function plugin(bb: BbPluginApi) {
     return latest?.type === "turn/started" ? latest.createdAt : null;
   };
 
+  const latestTurnStartedAt = async (
+    threadId: string,
+  ): Promise<number | null> => {
+    const [latest] = await bb.sdk.threads.events.list({
+      threadId,
+      types: ["turn/started"],
+      order: "desc",
+      limit: "1",
+    });
+    return latest?.createdAt ?? null;
+  };
+
   const recordWorkStarted = (threadId: string, startedAt: number): void => {
     const result = db
       .prepare(
@@ -403,8 +424,8 @@ export default function plugin(bb: BbPluginApi) {
       );
       return { rows };
     },
-    async listWorkOrder() {
-      return { rows: readWorkOrder() };
+    async listWorkOrder({ threadIds }) {
+      return { rows: readWorkOrder(threadIds) };
     },
     async listLifecycle() {
       return { rows: readAll() };
@@ -559,7 +580,7 @@ export default function plugin(bb: BbPluginApi) {
       ) {
         return;
       }
-      void activeTurnStartedAt(threadId)
+      void latestTurnStartedAt(threadId)
         .then((startedAt) => {
           if (!disposed && startedAt !== null) {
             recordWorkStarted(threadId, startedAt);

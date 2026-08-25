@@ -144,6 +144,33 @@ describe("filtering", () => {
     expect(pinned.map((t) => t.id)).toEqual(["b"]);
     expect(inbox.map((t) => t.id)).toEqual(["a", "c"]);
   });
+
+  it("keeps a pinned parent and its unpinned descendants together", () => {
+    const { pinned, inbox } = partitionPinned([
+      thread({ id: "parent", isPinned: true }),
+      thread({ id: "child", parentThreadId: "parent" }),
+      thread({ id: "unrelated" }),
+    ]);
+
+    expect(pinned.map((item) => item.id)).toEqual(["parent", "child"]);
+    expect(inbox.map((item) => item.id)).toEqual(["unrelated"]);
+  });
+
+  it("promotes a whole family when a descendant is pinned", () => {
+    const { pinned, inbox } = partitionPinned([
+      thread({ id: "parent" }),
+      thread({ id: "pinned-child", parentThreadId: "parent", isPinned: true }),
+      thread({ id: "sibling", parentThreadId: "parent" }),
+      thread({ id: "unrelated" }),
+    ]);
+
+    expect(pinned.map((item) => item.id)).toEqual([
+      "parent",
+      "pinned-child",
+      "sibling",
+    ]);
+    expect(inbox.map((item) => item.id)).toEqual(["unrelated"]);
+  });
 });
 
 describe("child threads", () => {

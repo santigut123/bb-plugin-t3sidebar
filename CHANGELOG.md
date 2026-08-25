@@ -13,9 +13,9 @@
 
 ### Changed
 
-- When a thread starts working, its unpinned parent/child family moves to the
-  top of the inbox and keeps that position after finishing. Pinned threads
-  remain above it.
+- When a thread starts working, its parent/child family moves to the top of its
+  shelf and keeps that position after finishing. Families containing a pinned
+  thread remain together above the inbox.
 - Settling a parent thread now settles its full child subtree with it.
 - Child threads now remain visible directly beneath their parent as staggered,
   collapsible sidebar rows while retaining the parent and children header
@@ -33,7 +33,9 @@
 ### Fixed
 
 - New threads now appear automatically in the workspace that was selected
-  when they were created.
+  when they were created, and failed automatic additions retry after workspace
+  synchronization resumes.
+- Very short turns now still bump their thread family after the turn finishes.
 - Workspaces can now be created empty, without selecting projects or threads.
 - Workspace membership updates now compose safely across multiple bb tabs and
   report failures without closing the thread context menu.

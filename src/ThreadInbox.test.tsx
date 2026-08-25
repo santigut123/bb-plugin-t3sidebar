@@ -149,6 +149,38 @@ describe("ThreadInbox", () => {
     );
   });
 
+  it("keeps mixed-pin families nested together on the pinned shelf", () => {
+    render([
+      thread({ id: "parent", title: "Parent", createdAt: 1 }),
+      thread({
+        id: "child",
+        title: "Pinned child",
+        parentThreadId: "parent",
+        isPinned: true,
+        createdAt: 2,
+      }),
+      thread({ id: "other", title: "Unrelated", createdAt: 3 }),
+    ]);
+
+    const pinned = screen.getByRole("region", { name: "Pinned" });
+    expect(
+      within(pinned)
+        .getAllByRole("listitem")
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Parent"),
+      expect.stringContaining("Pinned child"),
+    ]);
+    expect(
+      within(pinned).getByText("Pinned child").closest("li")?.className,
+    ).toContain("ml-4");
+    expect(
+      within(screen.getByRole("region", { name: "Inbox" })).getByText(
+        "Unrelated",
+      ),
+    ).toBeDefined();
+  });
+
   it("keeps pinned threads first and bumps a recently working family", async () => {
     let workRows: Array<{ threadId: string; startedAt: number }> = [];
     const rendered = renderSlot(inbox, listProps, {
@@ -172,6 +204,14 @@ describe("ThreadInbox", () => {
       }),
       settings: testSettings(),
     });
+
+    await waitFor(() =>
+      expect(
+        rendered.inspection.rpcCalls.find(
+          (call) => call.method === "listWorkOrder",
+        )?.input,
+      ).toEqual({ threadIds: ["pinned", "parent", "child", "newer"] }),
+    );
 
     await waitFor(() =>
       expect(
@@ -389,7 +429,9 @@ describe("ThreadInbox", () => {
         ],
       },
       rpc: testRpc({
-        listWorkspaces: () => ({ workspaces }),
+        listWorkspaces: () => ({
+          workspaces: workspaces.map((workspace) => ({ ...workspace })),
+        }),
         setWorkspaceThreadMembership: (input) => {
           membership = input as typeof membership;
           const workspace = {
@@ -426,6 +468,63 @@ describe("ThreadInbox", () => {
       }),
     );
     expect(await screen.findByText("New landing thread")).toBeDefined();
+  });
+
+  it("retries automatic workspace assignment after a workspace refresh", async () => {
+    const visibleThreads = [
+      thread({ id: "thr_existing", title: "Existing thread" }),
+    ];
+    let workspaces = [
+      {
+        id: "workspace_landing",
+        name: "Landing",
+        projectIds: [] as string[],
+        threadIds: [] as string[],
+      },
+    ];
+    let attempts = 0;
+    const slot = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: visibleThreads,
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({
+          workspaces: workspaces.map((workspace) => ({ ...workspace })),
+        }),
+        setWorkspaceThreadMembership: (input) => {
+          attempts += 1;
+          if (attempts === 1) return Promise.reject(new Error("offline"));
+          const membership = input as {
+            projectId: string;
+            threadId: string;
+          };
+          const workspace = {
+            ...workspaces[0]!,
+            projectIds: [membership.projectId],
+            threadIds: [membership.threadId],
+          };
+          workspaces = [workspace];
+          return { workspace };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Landing" }));
+    visibleThreads.push(thread({ id: "thr_new", title: "New thread" }));
+    const Inbox = inbox.component;
+    slot.lifecycle.rerender(<Inbox {...listProps} />);
+
+    expect(
+      await screen.findByText("Could not add new thread to workspace."),
+    ).toBeDefined();
+    expect(attempts).toBe(1);
+
+    await slot.behavior.emitRealtime("workspaces", {});
+    await waitFor(() => expect(attempts).toBe(2));
+    expect(await screen.findByText("New thread")).toBeDefined();
   });
 
   it("does not include a project's threads until they are selected", async () => {
