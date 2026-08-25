@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import {
   childrenOf,
-  filterByProject,
   hideCollapsedDescendants,
   parentOf,
   partitionPinned,
@@ -128,15 +127,6 @@ describe("searchThreadsByTitle", () => {
 });
 
 describe("filtering", () => {
-  it("scopes to one project, or to all", () => {
-    const threads = [
-      thread({ id: "a", projectId: "p1" }),
-      thread({ id: "b", projectId: "p2" }),
-    ];
-    expect(filterByProject(threads, "p1").map((t) => t.id)).toEqual(["a"]);
-    expect(filterByProject(threads, null)).toHaveLength(2);
-  });
-
   it("drops archived threads", () => {
     const threads = [
       thread({ id: "a" }),

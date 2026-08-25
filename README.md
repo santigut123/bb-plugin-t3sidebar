@@ -15,8 +15,7 @@ default, and comes back the moment you switch away or disable this plugin.
 
 The plugin replaces the scrolling list only. bb's New-thread button, search
 field, plugin nav rows, and footer stay exactly where they are — this list
-filters by the host's search and adds workspace tabs plus a project scope
-picker.
+filters by the host's search and adds workspace tabs.
 
 ## Workspaces
 

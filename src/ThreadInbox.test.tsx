@@ -707,9 +707,10 @@ describe("ThreadInbox", () => {
     );
 
     await waitFor(() => expect(deleted).toBe("workspace_linux"));
-    expect(
-      await screen.findByRole("button", { name: "All projects" }),
-    ).toBeDefined();
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Linux" })).toBeNull(),
+    );
+    expect(screen.getByText("A thread")).toBeDefined();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
@@ -797,7 +798,7 @@ describe("ThreadInbox", () => {
     expect(document.activeElement).toBe(addWorkspace);
   });
 
-  it("scopes to one project", () => {
+  it("shows every project without a project scope picker", () => {
     render(
       [
         thread({ id: "a", title: "In bb", projectId: "proj_1" }),
@@ -808,11 +809,10 @@ describe("ThreadInbox", () => {
         { id: "proj_2", name: "other", isPersonal: false },
       ],
     );
-    // Radix opens on keyboard too, which jsdom can drive without pointer
-    // capture. Enter opens the list; the option click picks the scope.
-    fireEvent.keyDown(screen.getByLabelText(/Project scope/), { key: "Enter" });
-    fireEvent.click(screen.getByRole("option", { name: "other" }));
-    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+
+    expect(screen.queryByLabelText(/Project scope/)).toBeNull();
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByText("In bb")).toBeDefined();
     expect(screen.getByText("In other")).toBeDefined();
   });
 

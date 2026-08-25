@@ -2,6 +2,9 @@
 
 ## Comparison method
 
+> This document records the workspace-tabs QA pass before the project scope
+> picker beneath the tabs was removed. Workspace thread membership remains.
+
 - Compared the selected concept with the browser-rendered implementation at
   full-sidebar and focused workspace-rail scales.
 - State: bb dark theme with the Gruvbox palette, realistic projects and threads, three named workspaces, Landing selected, project scope set to All projects.

@@ -25,6 +25,11 @@
   circle.
 - Working threads again show a live elapsed time for the current turn.
 
+### Removed
+
+- The project scope picker beneath the workspace bar. The inbox now always
+  spans every project allowed by the selected workspace's thread membership.
+
 ### Fixed
 
 - New threads now appear automatically in the workspace that was selected

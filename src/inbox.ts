@@ -134,21 +134,6 @@ export function searchThreadsByTitle(
   );
 }
 
-export interface ProjectScope {
-  /** Project id, or null for "all projects". */
-  id: string | null;
-  name: string;
-}
-
-/** Threads in the chosen scope; every thread when the scope is null. */
-export function filterByProject(
-  threads: readonly PluginSidebarThread[],
-  projectId: string | null,
-): PluginSidebarThread[] {
-  if (projectId === null) return [...threads];
-  return threads.filter((thread) => thread.projectId === projectId);
-}
-
 /** Archived threads never belong in the inbox. */
 export function visibleInboxThreads(
   threads: readonly PluginSidebarThread[],
