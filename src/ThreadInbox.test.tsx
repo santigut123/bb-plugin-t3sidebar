@@ -306,6 +306,36 @@ describe("ThreadInbox", () => {
     expect(screen.queryByText("Hero copy")).toBeNull();
   });
 
+  it("highlights the active workspace without border bars", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "landing", title: "Hero copy" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({
+          workspaces: [
+            {
+              id: "workspace_landing",
+              name: "Landing",
+              projectIds: ["proj_1"],
+              threadIds: ["landing"],
+            },
+          ],
+        }),
+      }),
+      settings: testSettings(),
+    });
+
+    const landing = await screen.findByRole("button", { name: "Landing" });
+    expect(landing.className).not.toContain("border-b-2");
+
+    fireEvent.click(landing);
+    expect(landing.className).toContain("bg-sidebar-accent");
+    expect(landing.className).not.toContain("border-primary");
+  });
+
   it("does not include a project's threads until they are selected", async () => {
     renderSlot(inbox, listProps, {
       sidebarThreads: {

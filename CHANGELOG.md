@@ -24,6 +24,8 @@
 
 ### Fixed
 
+- Workspace tabs now use a compact filled selection state instead of blue
+  border bars beside their labels.
 - New root threads now join the currently selected workspace, while child
   threads inherit their parent's workspace membership.
 - Workspace membership updates now compose safely across multiple bb tabs and
