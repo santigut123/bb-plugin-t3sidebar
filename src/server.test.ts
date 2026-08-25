@@ -272,6 +272,68 @@ describe("workspace RPC", () => {
 
     await harness.lifecycle.dispose();
   });
+
+  it("reconciles descendants created before their root joins a workspace", async () => {
+    const childrenByParent: Record<string, Array<[string, string]>> = {
+      thr_root: [["thr_child", "proj_child"]],
+      thr_child: [["thr_grandchild", "proj_grandchild"]],
+    };
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3sidebar",
+      sdk: {
+        subscribe: () => () => {},
+        threads: {
+          list: async (args) =>
+            (childrenByParent[args?.parentThreadId ?? ""] ?? []).map(
+              ([id, projectId]) =>
+                makeThreadResponse({
+                  id,
+                  projectId,
+                  parentThreadId: args?.parentThreadId ?? null,
+                }),
+            ),
+          events: { list: async () => [] },
+        },
+      },
+    });
+    await plugin(bb);
+
+    const created = (await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "Landing",
+      projectIds: ["proj_existing"],
+      threadIds: ["thr_existing"],
+    })) as { workspace: { id: string } };
+
+    await harness.behavior.callRpc("addCreatedThreadToWorkspace", {
+      workspaceId: created.workspace.id,
+      projectId: "proj_root",
+      threadId: "thr_root",
+    });
+
+    expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
+      workspaces: [
+        {
+          id: created.workspace.id,
+          name: "Landing",
+          projectIds: [
+            "proj_existing",
+            "proj_root",
+            "proj_child",
+            "proj_grandchild",
+          ],
+          threadIds: [
+            "thr_existing",
+            "thr_root",
+            "thr_child",
+            "thr_grandchild",
+          ],
+        },
+      ],
+    });
+
+    await harness.lifecycle.dispose();
+  });
 });
 
 describe("turn start RPC", () => {

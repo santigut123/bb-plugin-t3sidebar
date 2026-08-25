@@ -161,6 +161,14 @@ export const t3sidebarRpcContract = defineRpcContract({
     }),
     output: z.object({ workspace: workspaceSchema }),
   },
+  addCreatedThreadToWorkspace: {
+    input: z.object({
+      workspaceId: z.string().trim().min(1),
+      projectId: z.string().trim().min(1),
+      threadId: z.string().trim().min(1),
+    }),
+    output: z.object({ workspace: workspaceSchema }),
+  },
   deleteWorkspace: {
     input: workspaceIdSchema,
     output: z.object({ ok: z.boolean() }),
@@ -331,6 +339,51 @@ export default function plugin(bb: BbPluginApi) {
     bb.realtime.publish(WORKSPACES_CHANNEL, { workspaceId });
   };
 
+  const addCreatedThreadToWorkspace = async (
+    workspaceId: string,
+    projectId: string,
+    threadId: string,
+  ): Promise<StoredWorkspace> => {
+    let workspace = setWorkspaceThreadMembership(
+      workspaceId,
+      projectId,
+      threadId,
+      true,
+    );
+    // Persist the root before yielding so a concurrently created child can
+    // inherit through the thread.created handler below.
+    publishWorkspace(workspaceId);
+
+    const parentIds = [threadId];
+    const seen = new Set(parentIds);
+    for (let index = 0; index < parentIds.length; index += 1) {
+      let offset = 0;
+      while (true) {
+        const children = await bb.sdk.threads.list({
+          parentThreadId: parentIds[index],
+          includeHidden: true,
+          limit: 100,
+          offset,
+        });
+        for (const child of children) {
+          if (seen.has(child.id)) continue;
+          seen.add(child.id);
+          parentIds.push(child.id);
+          workspace = setWorkspaceThreadMembership(
+            workspaceId,
+            child.projectId,
+            child.id,
+            true,
+          );
+          publishWorkspace(workspaceId);
+        }
+        if (children.length < 100) break;
+        offset += children.length;
+      }
+    }
+    return workspace;
+  };
+
   const activeTurnStartedAt = async (
     threadId: string,
   ): Promise<number | null> => {
@@ -486,6 +539,14 @@ export default function plugin(bb: BbPluginApi) {
         included,
       );
       publishWorkspace(workspace.id);
+      return { workspace };
+    },
+    async addCreatedThreadToWorkspace({ workspaceId, projectId, threadId }) {
+      const workspace = await addCreatedThreadToWorkspace(
+        workspaceId,
+        projectId,
+        threadId,
+      );
       return { workspace };
     },
     async deleteWorkspace({ workspaceId }) {

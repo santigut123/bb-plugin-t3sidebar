@@ -16,6 +16,7 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 // empty runtime first.
 const app = await loadPluginApp(() => import("../app"));
 const inbox = app.threadLists[0]!;
+const InboxComponent = inbox.component;
 
 function thread(
   overrides: Partial<PluginSidebarThread> = {},
@@ -335,7 +336,7 @@ describe("ThreadInbox", () => {
     expect(screen.getByText("No threads in this workspace")).toBeDefined();
   });
 
-  it("adds a newly created root thread to the selected workspace", async () => {
+  it("assigns only the root thread opened from this client's new-thread screen", async () => {
     const threads = [thread({ id: "existing", title: "Existing" })];
     const memberships: unknown[] = [];
     const workspace = {
@@ -352,7 +353,7 @@ describe("ThreadInbox", () => {
       },
       rpc: testRpc({
         listWorkspaces: () => ({ workspaces: [{ ...workspace }] }),
-        setWorkspaceThreadMembership: (input) => {
+        addCreatedThreadToWorkspace: (input) => {
           memberships.push(input);
           return { workspace };
         },
@@ -363,16 +364,21 @@ describe("ThreadInbox", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: workspace.name }),
     );
-    threads.push(
-      thread({ id: "created", title: "Created", projectId: "proj_1" }),
-      thread({
-        id: "child",
-        title: "Child",
-        projectId: "proj_1",
-        parentThreadId: "existing",
-      }),
+    rendered.lifecycle.rerender(
+      <InboxComponent {...listProps} activeThreadId={null} />,
     );
-    await rendered.behavior.emitRealtime("workspaces", {});
+    threads.push(
+      thread({ id: "other-client", title: "Other client" }),
+    );
+    rendered.lifecycle.rerender(
+      <InboxComponent {...listProps} activeThreadId={null} />,
+    );
+    expect(memberships).toEqual([]);
+
+    threads.push(thread({ id: "created", title: "Created" }));
+    rendered.lifecycle.rerender(
+      <InboxComponent {...listProps} activeThreadId="created" />,
+    );
 
     await waitFor(() =>
       expect(memberships).toEqual([
@@ -380,10 +386,102 @@ describe("ThreadInbox", () => {
           workspaceId: workspace.id,
           projectId: "proj_1",
           threadId: "created",
-          included: true,
         },
       ]),
     );
+  });
+
+  it("waits for the locally created thread to reach the sidebar cache", async () => {
+    const threads = [thread({ id: "existing" })];
+    const memberships: unknown[] = [];
+    const workspace = {
+      id: "workspace_landing",
+      name: "Landing",
+      projectIds: ["proj_1"],
+      threadIds: ["existing"],
+    };
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads,
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces: [{ ...workspace }] }),
+        addCreatedThreadToWorkspace: (input) => {
+          memberships.push(input);
+          return { workspace };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: workspace.name }),
+    );
+    rendered.lifecycle.rerender(
+      <InboxComponent {...listProps} activeThreadId={null} />,
+    );
+    rendered.lifecycle.rerender(
+      <InboxComponent {...listProps} activeThreadId="created" />,
+    );
+    expect(memberships).toEqual([]);
+
+    threads.push(thread({ id: "created", title: "Created" }));
+    rendered.lifecycle.rerender(
+      <InboxComponent {...listProps} activeThreadId="created" />,
+    );
+    await waitFor(() =>
+      expect(memberships).toEqual([
+        {
+          workspaceId: workspace.id,
+          projectId: "proj_1",
+          threadId: "created",
+        },
+      ]),
+    );
+  });
+
+  it("retries workspace assignment and reports the final failure", async () => {
+    const threads = [thread({ id: "existing" })];
+    let attempts = 0;
+    const workspace = {
+      id: "workspace_landing",
+      name: "Landing",
+      projectIds: ["proj_1"],
+      threadIds: ["existing"],
+    };
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads,
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces: [{ ...workspace }] }),
+        addCreatedThreadToWorkspace: () => {
+          attempts += 1;
+          throw new Error("offline");
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: workspace.name }),
+    );
+    rendered.lifecycle.rerender(
+      <InboxComponent {...listProps} activeThreadId={null} />,
+    );
+    threads.push(thread({ id: "created" }));
+    rendered.lifecycle.rerender(
+      <InboxComponent {...listProps} activeThreadId="created" />,
+    );
+
+    expect(
+      (await screen.findByRole("alert", {}, { timeout: 1_500 })).textContent,
+    ).toBe("Could not add the new thread to Landing.");
+    expect(attempts).toBe(3);
   });
 
   it("creates a named workspace from selected projects and threads", async () => {

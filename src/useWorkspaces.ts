@@ -27,6 +27,11 @@ export interface WorkspacesApi {
     threadId: string;
     included: boolean;
   }): Promise<Workspace>;
+  addCreatedThread(input: {
+    workspaceId: string;
+    projectId: string;
+    threadId: string;
+  }): Promise<Workspace>;
   delete(workspaceId: string): Promise<void>;
 }
 
@@ -68,6 +73,11 @@ export function useWorkspaces(): WorkspacesApi {
     },
     async setThreadMembership(input) {
       const result = await rpc.call("setWorkspaceThreadMembership", input);
+      await refresh();
+      return result.workspace;
+    },
+    async addCreatedThread(input) {
+      const result = await rpc.call("addCreatedThreadToWorkspace", input);
       await refresh();
       return result.workspace;
     },

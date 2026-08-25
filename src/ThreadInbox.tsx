@@ -37,6 +37,7 @@ import { statusPresentation } from "./StatusGlyph";
 import { useTurnStarts } from "./useTurnStarts";
 import { WorkspaceTabs } from "./WorkspaceTabs";
 import { useWorkspaces } from "./useWorkspaces";
+import { retryWorkspaceAssignment } from "./workspace-assignment";
 import {
   filterByProject,
   hideCollapsedDescendants,
@@ -89,9 +90,22 @@ export function ThreadInbox({
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(
     null,
   );
-  const knownThreadIds = useRef(
+  const previousActiveThreadId = useRef(activeThreadId);
+  const newThreadBaseline = useRef(
     new Set(threads.map((thread) => thread.id)),
   );
+  const newThreadWorkspace = useRef<{ id: string; name: string } | null>(null);
+  const workspacesRef = useRef(workspaces);
+  workspacesRef.current = workspaces;
+  const assignmentInFlight = useRef(new Set<string>());
+  const [pendingCreatedThread, setPendingCreatedThread] = useState<{
+    threadId: string;
+    workspaceId: string;
+    workspaceName: string;
+  } | null>(null);
+  const [workspaceAssignmentError, setWorkspaceAssignmentError] = useState<
+    string | null
+  >(null);
   // One clock for every card in a render, quantized to the minute so the
   // labels do not disagree and do not churn on unrelated re-renders.
   const [nowMinute, setNowMinute] = useState(() =>
@@ -121,28 +135,77 @@ export function ThreadInbox({
       (workspace) => workspace.id === activeWorkspaceId,
     ) ?? null;
   useEffect(() => {
-    const previousIds = knownThreadIds.current;
-    knownThreadIds.current = new Set(threads.map((thread) => thread.id));
-    if (activeWorkspace === null) return;
+    const previous = previousActiveThreadId.current;
+    previousActiveThreadId.current = activeThreadId;
 
-    for (const thread of threads) {
-      if (
-        previousIds.has(thread.id) ||
-        thread.parentThreadId !== null ||
-        activeWorkspace.threadIds.includes(thread.id)
-      ) {
-        continue;
+    if (activeThreadId === null) {
+      if (previous !== null) {
+        newThreadBaseline.current = new Set(
+          threads.map((thread) => thread.id),
+        );
+        setWorkspaceAssignmentError(null);
       }
-      void workspaces
-        .setThreadMembership({
-          workspaceId: activeWorkspace.id,
-          projectId: thread.projectId,
-          threadId: thread.id,
-          included: true,
-        })
-        .catch(() => undefined);
+      newThreadWorkspace.current =
+        activeWorkspace === null
+          ? null
+          : { id: activeWorkspace.id, name: activeWorkspace.name };
+      return;
     }
-  }, [activeWorkspace, threads]);
+
+    const workspace = newThreadWorkspace.current;
+    if (
+      previous === null &&
+      workspace !== null &&
+      !newThreadBaseline.current.has(activeThreadId)
+    ) {
+      setPendingCreatedThread({
+        threadId: activeThreadId,
+        workspaceId: workspace.id,
+        workspaceName: workspace.name,
+      });
+    }
+  }, [activeThreadId, activeWorkspace, threads]);
+
+  const createdThread =
+    pendingCreatedThread === null
+      ? null
+      : (threads.find(
+          (thread) => thread.id === pendingCreatedThread.threadId,
+        ) ?? null);
+  useEffect(() => {
+    if (pendingCreatedThread === null || createdThread === null) return;
+    if (createdThread.parentThreadId !== null) {
+      setPendingCreatedThread(null);
+      return;
+    }
+
+    const assignmentKey = `${pendingCreatedThread.workspaceId}:${createdThread.id}`;
+    if (assignmentInFlight.current.has(assignmentKey)) return;
+    assignmentInFlight.current.add(assignmentKey);
+    setWorkspaceAssignmentError(null);
+
+    void retryWorkspaceAssignment(() =>
+      workspacesRef.current.addCreatedThread({
+        workspaceId: pendingCreatedThread.workspaceId,
+        projectId: createdThread.projectId,
+        threadId: createdThread.id,
+      }),
+    )
+      .catch(() => {
+        setWorkspaceAssignmentError(
+          `Could not add the new thread to ${pendingCreatedThread.workspaceName}.`,
+        );
+      })
+      .finally(() => {
+        assignmentInFlight.current.delete(assignmentKey);
+        setPendingCreatedThread(null);
+      });
+  }, [
+    createdThread?.id,
+    createdThread?.parentThreadId,
+    createdThread?.projectId,
+    pendingCreatedThread,
+  ]);
   const workspaceProjectIds = useMemo(
     () =>
       activeWorkspace === null ? null : new Set(activeWorkspace.projectIds),
@@ -287,6 +350,11 @@ export function ThreadInbox({
         threads={threads}
         workspaces={workspaces}
       />
+      {workspaceAssignmentError === null ? null : (
+        <p role="alert" className="px-2 py-1 text-xs text-destructive">
+          {workspaceAssignmentError}
+        </p>
+      )}
       {/* Everything else in the chrome above — New thread, search — is bb's
           and stays bb's. */}
       <div className="flex shrink-0 items-center gap-1 px-2 pb-1">
