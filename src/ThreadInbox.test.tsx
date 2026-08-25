@@ -16,6 +16,7 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 // empty runtime first.
 const app = await loadPluginApp(() => import("../app"));
 const inbox = app.threadLists[0]!;
+const InboxComponent = inbox.component;
 
 function thread(
   overrides: Partial<PluginSidebarThread> = {},
@@ -399,7 +400,7 @@ describe("ThreadInbox", () => {
     expect(screen.queryByText("Hero copy")).toBeNull();
   });
 
-  it("adds a newly appearing thread to the active workspace", async () => {
+  it("adds only a locally created root thread to the active workspace", async () => {
     const visibleThreads = [
       thread({ id: "thr_existing", title: "Existing thread" }),
     ];
@@ -416,7 +417,6 @@ describe("ThreadInbox", () => {
           workspaceId: string;
           projectId: string;
           threadId: string;
-          included: boolean;
         }
       | undefined;
     const slot = renderSlot(inbox, listProps, {
@@ -432,7 +432,7 @@ describe("ThreadInbox", () => {
         listWorkspaces: () => ({
           workspaces: workspaces.map((workspace) => ({ ...workspace })),
         }),
-        setWorkspaceThreadMembership: (input) => {
+        addCreatedThreadToWorkspace: (input) => {
           membership = input as typeof membership;
           const workspace = {
             ...workspaces[0]!,
@@ -450,21 +450,29 @@ describe("ThreadInbox", () => {
     expect(membership).toBeUndefined();
 
     visibleThreads.push(
+      thread({ id: "thr_other_client", title: "Other client's thread" }),
+    );
+    slot.lifecycle.rerender(
+      <InboxComponent {...listProps} activeThreadId={null} />,
+    );
+    expect(membership).toBeUndefined();
+
+    visibleThreads.push(
       thread({
         id: "thr_new",
         projectId: "proj_2",
         title: "New landing thread",
       }),
     );
-    const Inbox = inbox.component;
-    slot.lifecycle.rerender(<Inbox {...listProps} />);
+    slot.lifecycle.rerender(
+      <InboxComponent {...listProps} activeThreadId="thr_new" />,
+    );
 
     await waitFor(() =>
       expect(membership).toEqual({
         workspaceId: "workspace_landing",
         projectId: "proj_2",
         threadId: "thr_new",
-        included: true,
       }),
     );
     expect(await screen.findByText("New landing thread")).toBeDefined();
@@ -493,7 +501,7 @@ describe("ThreadInbox", () => {
         listWorkspaces: () => ({
           workspaces: workspaces.map((workspace) => ({ ...workspace })),
         }),
-        setWorkspaceThreadMembership: (input) => {
+        addCreatedThreadToWorkspace: (input) => {
           attempts += 1;
           if (attempts === 1) return Promise.reject(new Error("offline"));
           const membership = input as {
@@ -514,8 +522,9 @@ describe("ThreadInbox", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Landing" }));
     visibleThreads.push(thread({ id: "thr_new", title: "New thread" }));
-    const Inbox = inbox.component;
-    slot.lifecycle.rerender(<Inbox {...listProps} />);
+    slot.lifecycle.rerender(
+      <InboxComponent {...listProps} activeThreadId="thr_new" />,
+    );
 
     expect(
       await screen.findByText("Could not add new thread to workspace."),
@@ -525,6 +534,36 @@ describe("ThreadInbox", () => {
     await slot.behavior.emitRealtime("workspaces", {});
     await waitFor(() => expect(attempts).toBe(2));
     expect(await screen.findByText("New thread")).toBeDefined();
+  });
+
+  it("highlights the active workspace without border bars", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "landing", title: "Hero copy" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({
+          workspaces: [
+            {
+              id: "workspace_landing",
+              name: "Landing",
+              projectIds: ["proj_1"],
+              threadIds: ["landing"],
+            },
+          ],
+        }),
+      }),
+      settings: testSettings(),
+    });
+
+    const landing = await screen.findByRole("button", { name: "Landing" });
+    expect(landing.className).not.toContain("border-b-2");
+
+    fireEvent.click(landing);
+    expect(landing.className).toContain("bg-sidebar-accent");
+    expect(landing.className).not.toContain("border-primary");
   });
 
   it("does not include a project's threads until they are selected", async () => {

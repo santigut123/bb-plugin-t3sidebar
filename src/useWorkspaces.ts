@@ -27,6 +27,11 @@ export interface WorkspacesApi {
     threadId: string;
     included: boolean;
   }): Promise<Workspace>;
+  addCreatedThread(input: {
+    workspaceId: string;
+    projectId: string;
+    threadId: string;
+  }): Promise<Workspace>;
   delete(workspaceId: string): Promise<void>;
 }
 
@@ -87,6 +92,19 @@ export function useWorkspaces(): WorkspacesApi {
     [refresh, rpc],
   );
 
+  const addCreatedThread = useCallback(
+    async (input: {
+      workspaceId: string;
+      projectId: string;
+      threadId: string;
+    }) => {
+      const result = await rpc.call("addCreatedThreadToWorkspace", input);
+      await refresh();
+      return result.workspace;
+    },
+    [refresh, rpc],
+  );
+
   const deleteWorkspace = useCallback(
     async (workspaceId: string) => {
       await rpc.call("deleteWorkspace", { workspaceId });
@@ -100,8 +118,9 @@ export function useWorkspaces(): WorkspacesApi {
       workspaces,
       save,
       setThreadMembership,
+      addCreatedThread,
       delete: deleteWorkspace,
     }),
-    [deleteWorkspace, save, setThreadMembership, workspaces],
+    [addCreatedThread, deleteWorkspace, save, setThreadMembership, workspaces],
   );
 }

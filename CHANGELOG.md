@@ -35,6 +35,10 @@
 - New threads now appear automatically in the workspace that was selected
   when they were created, and failed automatic additions retry after workspace
   synchronization resumes.
+- Child threads inherit every workspace containing their parent, including
+  descendants created during root-assignment races.
+- Workspace tabs now use a compact filled selection state instead of blue
+  border bars beside their labels.
 - Very short turns now still bump their thread family after the turn finishes.
 - Workspaces can now be created empty, without selecting projects or threads.
 - Workspace membership updates now compose safely across multiple bb tabs and

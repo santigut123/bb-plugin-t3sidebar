@@ -42,7 +42,7 @@ export function WorkspaceTabs({
             <button
               type="button"
               aria-pressed="true"
-              className="shrink-0 border-b-2 border-primary px-2 text-xs font-medium text-foreground"
+              className="my-1 shrink-0 rounded-md bg-sidebar-accent px-2 text-xs font-medium text-foreground"
             >
               All projects
             </button>
@@ -55,16 +55,19 @@ export function WorkspaceTabs({
                   <ContextMenu.Trigger asChild>
                     <button
                       ref={(button) => {
-                        if (button) workspaceButtons.current.set(workspace.id, button);
-                        else workspaceButtons.current.delete(workspace.id);
+                        if (button) {
+                          workspaceButtons.current.set(workspace.id, button);
+                        } else {
+                          workspaceButtons.current.delete(workspace.id);
+                        }
                       }}
                       type="button"
                       aria-pressed={active}
                       className={cn(
-                        "flex shrink-0 items-center gap-1.5 border-b-2 px-2 text-xs font-medium transition-colors",
+                        "my-1 flex shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors",
                         active
-                          ? "border-primary text-foreground"
-                          : "border-transparent text-muted-foreground hover:text-foreground",
+                          ? "bg-sidebar-accent text-foreground"
+                          : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
                       )}
                       onClick={() =>
                         onActiveWorkspaceChange(active ? null : workspace.id)
@@ -72,7 +75,7 @@ export function WorkspaceTabs({
                     >
                       <span
                         aria-hidden="true"
-                        className="size-1.5 rounded-full"
+                        className="size-1.5 shrink-0 rounded-full"
                         style={{ backgroundColor: accent.stripe }}
                       />
                       {workspace.name}

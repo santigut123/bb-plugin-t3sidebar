@@ -183,6 +183,14 @@ export const t3sidebarRpcContract = defineRpcContract({
     }),
     output: z.object({ workspace: workspaceSchema }),
   },
+  addCreatedThreadToWorkspace: {
+    input: z.object({
+      workspaceId: z.string().trim().min(1),
+      projectId: z.string().trim().min(1),
+      threadId: z.string().trim().min(1),
+    }),
+    output: z.object({ workspace: workspaceSchema }),
+  },
   deleteWorkspace: {
     input: workspaceIdSchema,
     output: z.object({ ok: z.boolean() }),
@@ -375,6 +383,53 @@ export default function plugin(bb: BbPluginApi) {
     bb.realtime.publish(WORKSPACES_CHANNEL, { workspaceId });
   };
 
+  const addCreatedThreadToWorkspace = async (
+    workspaceId: string,
+    projectId: string,
+    threadId: string,
+  ): Promise<StoredWorkspace> => {
+    let workspace = setWorkspaceThreadMembership(
+      workspaceId,
+      projectId,
+      threadId,
+      true,
+    );
+    // Persist the root before yielding so a concurrently created child can
+    // inherit through the thread.created handler below.
+    publishWorkspace(workspaceId);
+
+    const parentIds = [threadId];
+    const seen = new Set(parentIds);
+    let addedDescendant = false;
+    for (let index = 0; index < parentIds.length; index += 1) {
+      let offset = 0;
+      while (true) {
+        const children = await bb.sdk.threads.list({
+          parentThreadId: parentIds[index],
+          includeHidden: true,
+          limit: 100,
+          offset,
+        });
+        for (const child of children) {
+          if (seen.has(child.id)) continue;
+          seen.add(child.id);
+          parentIds.push(child.id);
+          workspace = setWorkspaceThreadMembership(
+            workspaceId,
+            child.projectId,
+            child.id,
+            true,
+          );
+          addedDescendant = true;
+        }
+        if (children.length < 100) break;
+        offset += children.length;
+      }
+    }
+    if (addedDescendant) publishWorkspace(workspaceId);
+    return workspace;
+  };
+
   const activeTurnStartedAt = async (
     threadId: string,
   ): Promise<number | null> => {
@@ -562,6 +617,14 @@ export default function plugin(bb: BbPluginApi) {
       publishWorkspace(workspace.id);
       return { workspace };
     },
+    async addCreatedThreadToWorkspace({ workspaceId, projectId, threadId }) {
+      const workspace = await addCreatedThreadToWorkspace(
+        workspaceId,
+        projectId,
+        threadId,
+      );
+      return { workspace };
+    },
     async deleteWorkspace({ workspaceId }) {
       db.prepare(`DELETE FROM workspaces WHERE id = ?`).run(workspaceId);
       publishWorkspace(workspaceId);
@@ -589,6 +652,25 @@ export default function plugin(bb: BbPluginApi) {
         })
         .catch(() => undefined);
     },
+  });
+
+  bb.events.on("thread.created", ({ thread }) => {
+    if (thread.parentThreadId === null) return;
+    for (const workspace of readWorkspaces()) {
+      if (
+        !workspace.threadIds.includes(thread.parentThreadId) ||
+        workspace.threadIds.includes(thread.id)
+      ) {
+        continue;
+      }
+      setWorkspaceThreadMembership(
+        workspace.id,
+        thread.projectId,
+        thread.id,
+        true,
+      );
+      publishWorkspace(workspace.id);
+    }
   });
 
   // A deleted thread must not leave a row behind that would park a future

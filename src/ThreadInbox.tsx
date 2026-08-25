@@ -115,57 +115,75 @@ export function ThreadInbox({
     workspaces.workspaces.find(
       (workspace) => workspace.id === activeWorkspaceId,
     ) ?? null;
-  // The host owns thread creation, so capture additions from its live list.
-  // Seed once to avoid absorbing every existing thread when the plugin mounts.
-  const seenThreadIds = useRef<Set<string> | null>(null);
+  const previousActiveThreadId = useRef(activeThreadId);
+  const newThreadBaseline = useRef(
+    new Set(threads.map((thread) => thread.id)),
+  );
+  const newThreadWorkspaceId = useRef<string | null>(null);
   const pendingWorkspaceAssignments = useRef(
-    new Map<
-      string,
-      { workspaceId: string; projectId: string; threadId: string }
-    >(),
+    new Map<string, { workspaceId: string; threadId: string }>(),
   );
   const workspaceAssignmentsInFlight = useRef(new Set<string>());
   const threadIdsKey = JSON.stringify(threads.map((thread) => thread.id));
-  useEffect(() => {
-    if (status !== "ready") return;
 
-    if (seenThreadIds.current === null) {
-      seenThreadIds.current = new Set(threads.map((thread) => thread.id));
+  // The host owns New Thread. Capture the selected workspace while this client
+  // is on that screen, then queue only the new active root from this client.
+  useEffect(() => {
+    const previous = previousActiveThreadId.current;
+    previousActiveThreadId.current = activeThreadId;
+
+    if (activeThreadId === null) {
+      if (previous !== null) {
+        newThreadBaseline.current = new Set(
+          threads.map((thread) => thread.id),
+        );
+        setWorkspaceMembershipError(null);
+      }
+      newThreadWorkspaceId.current = activeWorkspace?.id ?? null;
       return;
     }
 
-    const seen = seenThreadIds.current;
-    const newThreads = threads.filter((thread) => !seen.has(thread.id));
-    newThreads.forEach((thread) => seen.add(thread.id));
-    if (activeWorkspace !== null) {
-      newThreads
-        .filter((thread) => !activeWorkspace.threadIds.includes(thread.id))
-        .forEach((thread) =>
-          pendingWorkspaceAssignments.current.set(thread.id, {
-            workspaceId: activeWorkspace.id,
-            projectId: thread.projectId,
-            threadId: thread.id,
-          }),
-        );
+    const workspaceId = newThreadWorkspaceId.current;
+    if (
+      previous === null &&
+      workspaceId !== null &&
+      !newThreadBaseline.current.has(activeThreadId)
+    ) {
+      pendingWorkspaceAssignments.current.set(activeThreadId, {
+        workspaceId,
+        threadId: activeThreadId,
+      });
     }
+  }, [activeThreadId, activeWorkspace, threads]);
+
+  useEffect(() => {
+    if (status !== "ready") return;
 
     const workspaceById = new Map(
       workspaces.workspaces.map((workspace) => [workspace.id, workspace]),
     );
-    const currentThreadIds = new Set(threads.map((thread) => thread.id));
+    const threadById = new Map(threads.map((thread) => [thread.id, thread]));
     const assignments = [
       ...pendingWorkspaceAssignments.current.values(),
-    ].filter((assignment) => {
+    ].flatMap((assignment) => {
       const workspace = workspaceById.get(assignment.workspaceId);
+      if (!workspace) {
+        pendingWorkspaceAssignments.current.delete(assignment.threadId);
+        return [];
+      }
+      const thread = threadById.get(assignment.threadId);
+      if (!thread) return [];
       if (
-        !workspace ||
-        !currentThreadIds.has(assignment.threadId) ||
+        thread.parentThreadId !== null ||
         workspace.threadIds.includes(assignment.threadId)
       ) {
         pendingWorkspaceAssignments.current.delete(assignment.threadId);
-        return false;
+        return [];
       }
-      return !workspaceAssignmentsInFlight.current.has(assignment.threadId);
+      if (workspaceAssignmentsInFlight.current.has(assignment.threadId)) {
+        return [];
+      }
+      return [{ ...assignment, projectId: thread.projectId }];
     });
     if (assignments.length === 0) return;
 
@@ -173,11 +191,10 @@ export function ThreadInbox({
     assignments.forEach((assignment) => {
       workspaceAssignmentsInFlight.current.add(assignment.threadId);
       void workspaces
-        .setThreadMembership({
+        .addCreatedThread({
           workspaceId: assignment.workspaceId,
           projectId: assignment.projectId,
           threadId: assignment.threadId,
-          included: true,
         })
         .then(() =>
           pendingWorkspaceAssignments.current.delete(assignment.threadId),
@@ -189,7 +206,7 @@ export function ThreadInbox({
           workspaceAssignmentsInFlight.current.delete(assignment.threadId),
         );
     });
-  }, [activeWorkspace, status, threadIdsKey, threads, workspaces]);
+  }, [activeThreadId, status, threadIdsKey, threads, workspaces]);
   const workspaceThreadIds = useMemo(
     () => (activeWorkspace === null ? null : new Set(activeWorkspace.threadIds)),
     [activeWorkspace],
