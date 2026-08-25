@@ -70,6 +70,34 @@ describe("lifecycle RPC", () => {
 });
 
 describe("workspace RPC", () => {
+  it("creates an empty workspace without projects or threads", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3sidebar",
+      sdk: {
+        subscribe: () => () => {},
+        threads: { events: { list: async () => [] } },
+      },
+    });
+    await plugin(bb);
+
+    const created = await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "Empty",
+      projectIds: [],
+      threadIds: [],
+    });
+
+    expect(created).toEqual({
+      workspace: {
+        id: expect.stringMatching(/^workspace_/),
+        name: "Empty",
+        projectIds: [],
+        threadIds: [],
+      },
+    });
+    await harness.lifecycle.dispose();
+  });
+
   it("creates, updates, lists, and deletes named project groups", async () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "t3sidebar",

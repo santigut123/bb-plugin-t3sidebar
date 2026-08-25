@@ -21,15 +21,16 @@ picker.
 ## Workspaces
 
 Workspaces sit in a compact, always-visible row at the top of the list. Each
-one has a name, one or more bb projects, and an explicit selection of threads.
+one has a name, optional bb projects, and an explicit selection of threads.
 Projects define the context available inside the workspace; adding a project
 does not automatically add all of its active threads. This means the same
 project can appear in several workspaces with a different set of threads in
-each. Use **+** to create one, then right-click its tab to rename it, change its
-projects or threads, or delete it. You can also right-click any thread and use
-**Workspaces** to add or remove it directly. Click the selected workspace again
-to return to the all-threads view. Workspace names and membership are stored in
-the plugin's SQLite database.
+each. A workspace can also start empty, with no projects or threads. Use **+**
+to create one, then right-click its tab to rename it, change its projects or
+threads, or delete it. You can also right-click any thread and use
+**Workspaces** to add or remove it directly. Click the selected workspace
+again to return to the all-threads view. Workspace names and membership are
+stored in the plugin's SQLite database.
 
 ## The idea
 

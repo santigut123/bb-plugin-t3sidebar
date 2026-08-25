@@ -147,7 +147,7 @@ export const t3sidebarRpcContract = defineRpcContract({
     input: z.object({
       workspaceId: z.string().trim().min(1).nullable(),
       name: z.string().trim().min(1).max(64),
-      projectIds: z.array(z.string().trim().min(1)).min(1).max(100),
+      projectIds: z.array(z.string().trim().min(1)).max(100),
       threadIds: z.array(z.string().trim().min(1)).max(500),
     }),
     output: z.object({ workspace: workspaceSchema }),

@@ -101,7 +101,7 @@ export function WorkspaceEditor({
   }, [fallbackFocus, returnFocus]);
 
   const busy = saving || deleting;
-  const canSave = name.trim().length > 0 && selectedProjects.size > 0 && !busy;
+  const canSave = name.trim().length > 0 && !busy;
   const availableThreads = threads.filter(
     (thread) => !thread.isArchived && selectedProjects.has(thread.projectId),
   );
@@ -152,8 +152,7 @@ export function WorkspaceEditor({
           {workspace === null ? "New workspace" : "Edit workspace"}
         </h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Choose the projects available here, then include only the threads you
-          need.
+          Projects and threads are optional. Add only the context you need.
         </p>
 
         <label

@@ -24,6 +24,7 @@
 
 ### Fixed
 
+- Workspaces can now be created empty, without selecting projects or threads.
 - Workspace membership updates now compose safely across multiple bb tabs and
   report failures without closing the thread context menu.
 - Deleting one workspace no longer deselects a different active workspace.

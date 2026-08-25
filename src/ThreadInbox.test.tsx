@@ -414,6 +414,58 @@ describe("ThreadInbox", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("creates an empty workspace without selecting projects or threads", async () => {
+    let saved:
+      | {
+          workspaceId: string | null;
+          name: string;
+          projectIds: string[];
+          threadIds: string[];
+        }
+      | undefined;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ title: "Existing thread" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        saveWorkspace: (input) => {
+          saved = input as typeof saved;
+          return {
+            workspace: {
+              id: "workspace_empty",
+              name: saved!.name,
+              projectIds: saved!.projectIds,
+              threadIds: saved!.threadIds,
+            },
+          };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Add workspace" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "New workspace" });
+    fireEvent.change(within(dialog).getByLabelText("Workspace name"), {
+      target: { value: "Empty" },
+    });
+    const create = within(dialog).getByRole("button", { name: "Create" });
+    expect((create as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(create);
+
+    await waitFor(() =>
+      expect(saved).toEqual({
+        workspaceId: null,
+        name: "Empty",
+        projectIds: [],
+        threadIds: [],
+      }),
+    );
+  });
+
   it("renames a workspace and changes its membership", async () => {
     let workspaces = [
       {
