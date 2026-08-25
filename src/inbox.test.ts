@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 import {
   childrenOf,
-  filterByProject,
   hideCollapsedDescendants,
   parentOf,
   partitionPinned,
@@ -128,15 +127,6 @@ describe("searchThreadsByTitle", () => {
 });
 
 describe("filtering", () => {
-  it("scopes to one project, or to all", () => {
-    const threads = [
-      thread({ id: "a", projectId: "p1" }),
-      thread({ id: "b", projectId: "p2" }),
-    ];
-    expect(filterByProject(threads, "p1").map((t) => t.id)).toEqual(["a"]);
-    expect(filterByProject(threads, null)).toHaveLength(2);
-  });
-
   it("drops archived threads", () => {
     const threads = [
       thread({ id: "a" }),
@@ -154,9 +144,58 @@ describe("filtering", () => {
     expect(pinned.map((t) => t.id)).toEqual(["b"]);
     expect(inbox.map((t) => t.id)).toEqual(["a", "c"]);
   });
+
+  it("keeps a pinned parent and its unpinned descendants together", () => {
+    const { pinned, inbox } = partitionPinned([
+      thread({ id: "parent", isPinned: true }),
+      thread({ id: "child", parentThreadId: "parent" }),
+      thread({ id: "unrelated" }),
+    ]);
+
+    expect(pinned.map((item) => item.id)).toEqual(["parent", "child"]);
+    expect(inbox.map((item) => item.id)).toEqual(["unrelated"]);
+  });
+
+  it("promotes a whole family when a descendant is pinned", () => {
+    const { pinned, inbox } = partitionPinned([
+      thread({ id: "parent" }),
+      thread({ id: "pinned-child", parentThreadId: "parent", isPinned: true }),
+      thread({ id: "sibling", parentThreadId: "parent" }),
+      thread({ id: "unrelated" }),
+    ]);
+
+    expect(pinned.map((item) => item.id)).toEqual([
+      "parent",
+      "pinned-child",
+      "sibling",
+    ]);
+    expect(inbox.map((item) => item.id)).toEqual(["unrelated"]);
+  });
 });
 
 describe("child threads", () => {
+  it("bumps the most recently working family while keeping its hierarchy", () => {
+    const ordered = sortByThreadHierarchy(
+      [
+        thread({ id: "parent", createdAt: 1 }),
+        thread({ id: "older-child", parentThreadId: "parent", createdAt: 2 }),
+        thread({ id: "working-child", parentThreadId: "parent", createdAt: 3 }),
+        thread({ id: "newer-root", createdAt: 10 }),
+      ],
+      new Map([
+        ["working-child", 50],
+        ["newer-root", 40],
+      ]),
+    );
+
+    expect(ordered.map((item) => item.id)).toEqual([
+      "parent",
+      "working-child",
+      "older-child",
+      "newer-root",
+    ]);
+  });
+
   it("places descendants directly after their parent", () => {
     expect(
       sortByThreadHierarchy([

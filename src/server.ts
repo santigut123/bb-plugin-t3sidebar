@@ -26,6 +26,10 @@ const migrations = [
    )`,
   `ALTER TABLE workspaces
      ADD COLUMN thread_ids TEXT NOT NULL DEFAULT '[]'`,
+  `CREATE TABLE IF NOT EXISTS thread_work_order (
+     thread_id  TEXT PRIMARY KEY,
+     started_at INTEGER NOT NULL
+   )`,
 ];
 
 export interface StoredLifecycleRow {
@@ -66,6 +70,11 @@ interface WorkspaceDbRow {
   thread_ids: string;
 }
 
+interface WorkOrderDbRow {
+  thread_id: string;
+  started_at: number;
+}
+
 const threadIdSchema = z.object({ threadId: z.string().trim().min(1) });
 const projectIdSchema = z.object({ projectId: z.string().trim().min(1) });
 const hueSchema = z.number().int().min(0).max(359);
@@ -89,6 +98,19 @@ export const t3sidebarRpcContract = defineRpcContract({
         z.object({
           threadId: z.string(),
           startedAt: z.number().nullable(),
+        }),
+      ),
+    }),
+  },
+  listWorkOrder: {
+    input: z.object({
+      threadIds: z.array(z.string().trim().min(1)).max(500),
+    }),
+    output: z.object({
+      rows: z.array(
+        z.object({
+          threadId: z.string(),
+          startedAt: z.number(),
         }),
       ),
     }),
@@ -147,7 +169,7 @@ export const t3sidebarRpcContract = defineRpcContract({
     input: z.object({
       workspaceId: z.string().trim().min(1).nullable(),
       name: z.string().trim().min(1).max(64),
-      projectIds: z.array(z.string().trim().min(1)).min(1).max(100),
+      projectIds: z.array(z.string().trim().min(1)).max(100),
       threadIds: z.array(z.string().trim().min(1)).max(500),
     }),
     output: z.object({ workspace: workspaceSchema }),
@@ -161,6 +183,14 @@ export const t3sidebarRpcContract = defineRpcContract({
     }),
     output: z.object({ workspace: workspaceSchema }),
   },
+  addCreatedThreadToWorkspace: {
+    input: z.object({
+      workspaceId: z.string().trim().min(1),
+      projectId: z.string().trim().min(1),
+      threadId: z.string().trim().min(1),
+    }),
+    output: z.object({ workspace: workspaceSchema }),
+  },
   deleteWorkspace: {
     input: workspaceIdSchema,
     output: z.object({ ok: z.boolean() }),
@@ -171,6 +201,7 @@ export const t3sidebarRpcContract = defineRpcContract({
 export const LIFECYCLE_CHANNEL = "lifecycle";
 export const PROJECT_COLORS_CHANNEL = "project-colors";
 export const TURN_STARTS_CHANNEL = "turn-starts";
+export const WORK_ORDER_CHANNEL = "work-order";
 export const WORKSPACES_CHANNEL = "workspaces";
 
 export const t3sidebarSettings = {
@@ -263,6 +294,27 @@ export default function plugin(bb: BbPluginApi) {
       hue: row.hue,
     }));
 
+  const readWorkOrder = (
+    threadIds: readonly string[],
+  ): Array<{ threadId: string; startedAt: number }> => {
+    const uniqueThreadIds = [...new Set(threadIds)];
+    if (uniqueThreadIds.length === 0) return [];
+    const placeholders = uniqueThreadIds.map(() => "?").join(", ");
+    return (
+      db
+        .prepare(
+          `SELECT thread_id, started_at
+             FROM thread_work_order
+            WHERE thread_id IN (${placeholders})
+            ORDER BY started_at DESC, thread_id`,
+        )
+        .all(...uniqueThreadIds) as WorkOrderDbRow[]
+    ).map((row) => ({
+      threadId: row.thread_id,
+      startedAt: row.started_at,
+    }));
+  };
+
   const publishProjectColors = (projectId: string): void => {
     bb.realtime.publish(PROJECT_COLORS_CHANNEL, { projectId });
   };
@@ -331,6 +383,53 @@ export default function plugin(bb: BbPluginApi) {
     bb.realtime.publish(WORKSPACES_CHANNEL, { workspaceId });
   };
 
+  const addCreatedThreadToWorkspace = async (
+    workspaceId: string,
+    projectId: string,
+    threadId: string,
+  ): Promise<StoredWorkspace> => {
+    let workspace = setWorkspaceThreadMembership(
+      workspaceId,
+      projectId,
+      threadId,
+      true,
+    );
+    // Persist the root before yielding so a concurrently created child can
+    // inherit through the thread.created handler below.
+    publishWorkspace(workspaceId);
+
+    const parentIds = [threadId];
+    const seen = new Set(parentIds);
+    let addedDescendant = false;
+    for (let index = 0; index < parentIds.length; index += 1) {
+      let offset = 0;
+      while (true) {
+        const children = await bb.sdk.threads.list({
+          parentThreadId: parentIds[index],
+          includeHidden: true,
+          limit: 100,
+          offset,
+        });
+        for (const child of children) {
+          if (seen.has(child.id)) continue;
+          seen.add(child.id);
+          parentIds.push(child.id);
+          workspace = setWorkspaceThreadMembership(
+            workspaceId,
+            child.projectId,
+            child.id,
+            true,
+          );
+          addedDescendant = true;
+        }
+        if (children.length < 100) break;
+        offset += children.length;
+      }
+    }
+    if (addedDescendant) publishWorkspace(workspaceId);
+    return workspace;
+  };
+
   const activeTurnStartedAt = async (
     threadId: string,
   ): Promise<number | null> => {
@@ -343,15 +442,45 @@ export default function plugin(bb: BbPluginApi) {
     return latest?.type === "turn/started" ? latest.createdAt : null;
   };
 
+  const latestTurnStartedAt = async (
+    threadId: string,
+  ): Promise<number | null> => {
+    const [latest] = await bb.sdk.threads.events.list({
+      threadId,
+      types: ["turn/started"],
+      order: "desc",
+      limit: "1",
+    });
+    return latest?.createdAt ?? null;
+  };
+
+  const recordWorkStarted = (threadId: string, startedAt: number): void => {
+    const result = db
+      .prepare(
+        `INSERT INTO thread_work_order (thread_id, started_at)
+         VALUES (?, ?)
+         ON CONFLICT(thread_id) DO UPDATE SET started_at = excluded.started_at
+         WHERE excluded.started_at > thread_work_order.started_at`,
+      )
+      .run(threadId, startedAt);
+    if (result.changes > 0) {
+      bb.realtime.publish(WORK_ORDER_CHANNEL, { threadId, startedAt });
+    }
+  };
+
   bb.rpc.register(t3sidebarRpcContract, {
     async listTurnStarts({ threadIds }) {
       const rows = await Promise.all(
         [...new Set(threadIds)].map(async (threadId) => {
           const startedAt = await activeTurnStartedAt(threadId);
+          if (startedAt !== null) recordWorkStarted(threadId, startedAt);
           return { threadId, startedAt };
         }),
       );
       return { rows };
+    },
+    async listWorkOrder({ threadIds }) {
+      return { rows: readWorkOrder(threadIds) };
     },
     async listLifecycle() {
       return { rows: readAll() };
@@ -488,6 +617,14 @@ export default function plugin(bb: BbPluginApi) {
       publishWorkspace(workspace.id);
       return { workspace };
     },
+    async addCreatedThreadToWorkspace({ workspaceId, projectId, threadId }) {
+      const workspace = await addCreatedThreadToWorkspace(
+        workspaceId,
+        projectId,
+        threadId,
+      );
+      return { workspace };
+    },
     async deleteWorkspace({ workspaceId }) {
       db.prepare(`DELETE FROM workspaces WHERE id = ?`).run(workspaceId);
       publishWorkspace(workspaceId);
@@ -506,9 +643,10 @@ export default function plugin(bb: BbPluginApi) {
       ) {
         return;
       }
-      void activeTurnStartedAt(threadId)
+      void latestTurnStartedAt(threadId)
         .then((startedAt) => {
           if (!disposed && startedAt !== null) {
+            recordWorkStarted(threadId, startedAt);
             bb.realtime.publish(TURN_STARTS_CHANNEL, { threadId, startedAt });
           }
         })
@@ -516,10 +654,32 @@ export default function plugin(bb: BbPluginApi) {
     },
   });
 
+  bb.events.on("thread.created", ({ thread }) => {
+    if (thread.parentThreadId === null) return;
+    for (const workspace of readWorkspaces()) {
+      if (
+        !workspace.threadIds.includes(thread.parentThreadId) ||
+        workspace.threadIds.includes(thread.id)
+      ) {
+        continue;
+      }
+      setWorkspaceThreadMembership(
+        workspace.id,
+        thread.projectId,
+        thread.id,
+        true,
+      );
+      publishWorkspace(workspace.id);
+    }
+  });
+
   // A deleted thread must not leave a row behind that would park a future
   // thread reusing the id, and stale rows accumulate otherwise.
   bb.events.on("thread.deleted", ({ thread }) => {
     clear(thread.id);
+    db.prepare(`DELETE FROM thread_work_order WHERE thread_id = ?`).run(
+      thread.id,
+    );
   });
 
   bb.onDispose(() => {

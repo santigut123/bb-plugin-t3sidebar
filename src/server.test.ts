@@ -3,7 +3,11 @@ import {
   createFakePluginHost,
   makeThreadResponse,
 } from "@get-bb/plugin-sdk/testing";
-import plugin, { TURN_STARTS_CHANNEL, WORKSPACES_CHANNEL } from "./server";
+import plugin, {
+  TURN_STARTS_CHANNEL,
+  WORK_ORDER_CHANNEL,
+  WORKSPACES_CHANNEL,
+} from "./server";
 
 function turnStartedEvent(threadId: string, createdAt: number) {
   return {
@@ -70,6 +74,34 @@ describe("lifecycle RPC", () => {
 });
 
 describe("workspace RPC", () => {
+  it("creates an empty workspace without projects or threads", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3sidebar",
+      sdk: {
+        subscribe: () => () => {},
+        threads: { events: { list: async () => [] } },
+      },
+    });
+    await plugin(bb);
+
+    const created = await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "Empty",
+      projectIds: [],
+      threadIds: [],
+    });
+
+    expect(created).toEqual({
+      workspace: {
+        id: expect.stringMatching(/^workspace_/),
+        name: "Empty",
+        projectIds: [],
+        threadIds: [],
+      },
+    });
+    await harness.lifecycle.dispose();
+  });
+
   it("creates, updates, lists, and deletes named project groups", async () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "t3sidebar",
@@ -217,9 +249,195 @@ describe("workspace RPC", () => {
 
     await harness.lifecycle.dispose();
   });
+
+  it("adds a created child thread to every workspace containing its parent", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3sidebar",
+      sdk: {
+        subscribe: () => () => {},
+        threads: { events: { list: async () => [] } },
+      },
+    });
+    await plugin(bb);
+
+    const inherited = (await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "Inherited",
+      projectIds: ["proj_parent"],
+      threadIds: ["thr_parent"],
+    })) as { workspace: { id: string } };
+    const unrelated = (await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "Unrelated",
+      projectIds: ["proj_other"],
+      threadIds: ["thr_other"],
+    })) as { workspace: { id: string } };
+
+    await harness.behavior.emitThreadEvent("thread.created", {
+      thread: makeThreadResponse({
+        id: "thr_child",
+        parentThreadId: "thr_parent",
+        projectId: "proj_child",
+      }),
+    });
+
+    expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
+      workspaces: [
+        {
+          id: inherited.workspace.id,
+          name: "Inherited",
+          projectIds: ["proj_parent", "proj_child"],
+          threadIds: ["thr_parent", "thr_child"],
+        },
+        {
+          id: unrelated.workspace.id,
+          name: "Unrelated",
+          projectIds: ["proj_other"],
+          threadIds: ["thr_other"],
+        },
+      ],
+    });
+    expect(harness.inspection.realtimeSignals.at(-1)).toEqual({
+      channel: WORKSPACES_CHANNEL,
+      payload: { workspaceId: inherited.workspace.id },
+    });
+
+    await harness.lifecycle.dispose();
+  });
+
+  it("reconciles descendants created before their root joins a workspace", async () => {
+    const childrenByParent: Record<string, Array<[string, string]>> = {
+      thr_root: [["thr_child", "proj_child"]],
+      thr_child: [["thr_grandchild", "proj_grandchild"]],
+    };
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3sidebar",
+      sdk: {
+        subscribe: () => () => {},
+        threads: {
+          list: async (args) =>
+            (childrenByParent[args?.parentThreadId ?? ""] ?? []).map(
+              ([id, projectId]) =>
+                makeThreadResponse({
+                  id,
+                  projectId,
+                  parentThreadId: args?.parentThreadId ?? null,
+                }),
+            ),
+          events: { list: async () => [] },
+        },
+      },
+    });
+    await plugin(bb);
+
+    const created = (await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "Landing",
+      projectIds: ["proj_existing"],
+      threadIds: ["thr_existing"],
+    })) as { workspace: { id: string } };
+
+    await harness.behavior.callRpc("addCreatedThreadToWorkspace", {
+      workspaceId: created.workspace.id,
+      projectId: "proj_root",
+      threadId: "thr_root",
+    });
+
+    expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
+      workspaces: [
+        {
+          id: created.workspace.id,
+          name: "Landing",
+          projectIds: [
+            "proj_existing",
+            "proj_root",
+            "proj_child",
+            "proj_grandchild",
+          ],
+          threadIds: [
+            "thr_existing",
+            "thr_root",
+            "thr_child",
+            "thr_grandchild",
+          ],
+        },
+      ],
+    });
+
+    await harness.lifecycle.dispose();
+  });
 });
 
 describe("turn start RPC", () => {
+  it("keeps the latest work start after the turn completes", async () => {
+    let onThreadChanged:
+      | ((event: {
+          type: "changed";
+          entity: "thread";
+          id: string;
+          changes: ["events-appended"];
+          metadata: { eventTypes: ["turn/started"] };
+        }) => void)
+      | undefined;
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3sidebar",
+      sdk: {
+        subscribe: ({ callback }) => {
+          onThreadChanged = callback as typeof onThreadChanged;
+          return () => {};
+        },
+        threads: {
+          events: {
+            list: async ({ types }) =>
+              types?.length === 1 && types[0] === "turn/started"
+                ? [turnStartedEvent("thr_working", 40_000)]
+                : [turnCompletedEvent("thr_working", 50_000)],
+          },
+        },
+      },
+    });
+    await plugin(bb);
+
+    onThreadChanged?.({
+      type: "changed",
+      entity: "thread",
+      id: "thr_working",
+      changes: ["events-appended"],
+      metadata: { eventTypes: ["turn/started"] },
+    });
+    await vi.waitFor(async () =>
+      expect(
+        await harness.behavior.callRpc("listWorkOrder", {
+          threadIds: ["thr_working"],
+        }),
+      ).toEqual({
+        rows: [{ threadId: "thr_working", startedAt: 40_000 }],
+      }),
+    );
+
+    expect(
+      await harness.behavior.callRpc("listTurnStarts", {
+        threadIds: ["thr_working"],
+      }),
+    ).toEqual({
+      rows: [{ threadId: "thr_working", startedAt: null }],
+    });
+    expect(
+      await harness.behavior.callRpc("listWorkOrder", {
+        threadIds: ["thr_working"],
+      }),
+    ).toEqual({
+      rows: [{ threadId: "thr_working", startedAt: 40_000 }],
+    });
+    expect(
+      await harness.behavior.callRpc("listWorkOrder", {
+        threadIds: ["thr_other"],
+      }),
+    ).toEqual({ rows: [] });
+
+    await harness.lifecycle.dispose();
+  });
+
   it("returns the latest turn start for each unique requested thread", async () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "t3sidebar",
@@ -342,6 +560,10 @@ describe("turn start RPC", () => {
     });
     await vi.waitFor(() =>
       expect(harness.inspection.realtimeSignals).toEqual([
+        {
+          channel: WORK_ORDER_CHANNEL,
+          payload: { threadId: "thr_working", startedAt: 30_000 },
+        },
         {
           channel: TURN_STARTS_CHANNEL,
           payload: { threadId: "thr_working", startedAt: 30_000 },

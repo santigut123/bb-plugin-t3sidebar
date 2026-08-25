@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useRealtime,
   useRealtimeConnectionState,
@@ -26,6 +26,11 @@ export interface WorkspacesApi {
     projectId: string;
     threadId: string;
     included: boolean;
+  }): Promise<Workspace>;
+  addCreatedThread(input: {
+    workspaceId: string;
+    projectId: string;
+    threadId: string;
   }): Promise<Workspace>;
   delete(workspaceId: string): Promise<void>;
 }
@@ -59,21 +64,63 @@ export function useWorkspaces(): WorkspacesApi {
     }
   }, [connectionState, refresh]);
 
-  return {
-    workspaces,
-    async save(input) {
+  const save = useCallback(
+    async (input: {
+      workspaceId: string | null;
+      name: string;
+      projectIds: string[];
+      threadIds: string[];
+    }) => {
       const result = await rpc.call("saveWorkspace", input);
       await refresh();
       return result.workspace;
     },
-    async setThreadMembership(input) {
+    [refresh, rpc],
+  );
+
+  const setThreadMembership = useCallback(
+    async (input: {
+      workspaceId: string;
+      projectId: string;
+      threadId: string;
+      included: boolean;
+    }) => {
       const result = await rpc.call("setWorkspaceThreadMembership", input);
       await refresh();
       return result.workspace;
     },
-    async delete(workspaceId) {
+    [refresh, rpc],
+  );
+
+  const addCreatedThread = useCallback(
+    async (input: {
+      workspaceId: string;
+      projectId: string;
+      threadId: string;
+    }) => {
+      const result = await rpc.call("addCreatedThreadToWorkspace", input);
+      await refresh();
+      return result.workspace;
+    },
+    [refresh, rpc],
+  );
+
+  const deleteWorkspace = useCallback(
+    async (workspaceId: string) => {
       await rpc.call("deleteWorkspace", { workspaceId });
       await refresh();
     },
-  };
+    [refresh, rpc],
+  );
+
+  return useMemo(
+    () => ({
+      workspaces,
+      save,
+      setThreadMembership,
+      addCreatedThread,
+      delete: deleteWorkspace,
+    }),
+    [addCreatedThread, deleteWorkspace, save, setThreadMembership, workspaces],
+  );
 }

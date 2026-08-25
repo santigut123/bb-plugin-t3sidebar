@@ -2,7 +2,7 @@
   "name": "bb-plugin-t3sidebar",
   "version": "0.2.0",
   "type": "module",
-  "description": "A workspace-based inbox with stable thread ordering.",
+  "description": "A workspace-based inbox with activity-aware thread ordering.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -15,7 +15,7 @@
   },
   "bb": {
     "name": "T3 Sidebar",
-    "description": "A workspace-based inbox with stable thread ordering.",
+    "description": "A workspace-based inbox with activity-aware thread ordering.",
     "branding": {
       "icon": "PanelLeft"
     },
@@ -51,7 +51,6 @@
     "@types/better-sqlite3": "^7.6.12",
     "better-sqlite3": "12.10.0",
     "@radix-ui/react-context-menu": "^2.3.3",
-    "@radix-ui/react-select": "^2.3.3",
     "cron-parser": "^5.10.0",
     "hono": "^4.13.3"
   }

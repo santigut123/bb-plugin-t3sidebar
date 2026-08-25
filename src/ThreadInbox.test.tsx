@@ -16,6 +16,7 @@ import type { PluginSidebarThread } from "@get-bb/plugin-sdk";
 // empty runtime first.
 const app = await loadPluginApp(() => import("../app"));
 const inbox = app.threadLists[0]!;
+const InboxComponent = inbox.component;
 
 function thread(
   overrides: Partial<PluginSidebarThread> = {},
@@ -69,6 +70,7 @@ function testRpc(
     listLifecycle: () => ({ rows: [] }),
     listProjectColors: () => ({ rows: [] }),
     listTurnStarts: () => ({ rows: [] }),
+    listWorkOrder: () => ({ rows: [] }),
     listWorkspaces: () => ({ workspaces: [] }),
     ...overrides,
   };
@@ -145,6 +147,99 @@ describe("ThreadInbox", () => {
     ]);
     expect(screen.getByText("Child").closest("li")?.className).toContain(
       "ml-4",
+    );
+  });
+
+  it("keeps mixed-pin families nested together on the pinned shelf", () => {
+    render([
+      thread({ id: "parent", title: "Parent", createdAt: 1 }),
+      thread({
+        id: "child",
+        title: "Pinned child",
+        parentThreadId: "parent",
+        isPinned: true,
+        createdAt: 2,
+      }),
+      thread({ id: "other", title: "Unrelated", createdAt: 3 }),
+    ]);
+
+    const pinned = screen.getByRole("region", { name: "Pinned" });
+    expect(
+      within(pinned)
+        .getAllByRole("listitem")
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining("Parent"),
+      expect.stringContaining("Pinned child"),
+    ]);
+    expect(
+      within(pinned).getByText("Pinned child").closest("li")?.className,
+    ).toContain("ml-4");
+    expect(
+      within(screen.getByRole("region", { name: "Inbox" })).getByText(
+        "Unrelated",
+      ),
+    ).toBeDefined();
+  });
+
+  it("keeps pinned threads first and bumps a recently working family", async () => {
+    let workRows: Array<{ threadId: string; startedAt: number }> = [];
+    const rendered = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "pinned", title: "Pinned", isPinned: true }),
+          thread({ id: "parent", title: "Parent", createdAt: 1 }),
+          thread({
+            id: "child",
+            title: "Working child",
+            parentThreadId: "parent",
+            createdAt: 3,
+          }),
+          thread({ id: "newer", title: "Newer root", createdAt: 10 }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkOrder: () => ({ rows: workRows }),
+      }),
+      settings: testSettings(),
+    });
+
+    await waitFor(() =>
+      expect(
+        rendered.inspection.rpcCalls.find(
+          (call) => call.method === "listWorkOrder",
+        )?.input,
+      ).toEqual({ threadIds: ["pinned", "parent", "child", "newer"] }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("listitem").map((row) => row.textContent),
+      ).toEqual([
+        expect.stringContaining("Pinned"),
+        expect.stringContaining("Newer root"),
+        expect.stringContaining("Parent"),
+        expect.stringContaining("Working child"),
+      ]),
+    );
+
+    workRows = [{ threadId: "child", startedAt: 50 }];
+    await rendered.behavior.emitRealtime("work-order", {
+      threadId: "child",
+      startedAt: 50,
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("listitem").map((row) => row.textContent),
+      ).toEqual([
+        expect.stringContaining("Pinned"),
+        expect.stringContaining("Parent"),
+        expect.stringContaining("Working child"),
+        expect.stringContaining("Newer root"),
+      ]),
     );
   });
 
@@ -305,6 +400,172 @@ describe("ThreadInbox", () => {
     expect(screen.queryByText("Hero copy")).toBeNull();
   });
 
+  it("adds only a locally created root thread to the active workspace", async () => {
+    const visibleThreads = [
+      thread({ id: "thr_existing", title: "Existing thread" }),
+    ];
+    let workspaces = [
+      {
+        id: "workspace_landing",
+        name: "Landing",
+        projectIds: [] as string[],
+        threadIds: [] as string[],
+      },
+    ];
+    let membership:
+      | {
+          workspaceId: string;
+          projectId: string;
+          threadId: string;
+        }
+      | undefined;
+    const slot = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: visibleThreads,
+        projects: [
+          { id: "proj_1", name: "bb", isPersonal: false },
+          { id: "proj_2", name: "landing", isPersonal: false },
+        ],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({
+          workspaces: workspaces.map((workspace) => ({ ...workspace })),
+        }),
+        addCreatedThreadToWorkspace: (input) => {
+          membership = input as typeof membership;
+          const workspace = {
+            ...workspaces[0]!,
+            projectIds: [membership!.projectId],
+            threadIds: [membership!.threadId],
+          };
+          workspaces = [workspace];
+          return { workspace };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Landing" }));
+    expect(membership).toBeUndefined();
+
+    visibleThreads.push(
+      thread({ id: "thr_other_client", title: "Other client's thread" }),
+    );
+    slot.lifecycle.rerender(
+      <InboxComponent {...listProps} activeThreadId={null} />,
+    );
+    expect(membership).toBeUndefined();
+
+    visibleThreads.push(
+      thread({
+        id: "thr_new",
+        projectId: "proj_2",
+        title: "New landing thread",
+      }),
+    );
+    slot.lifecycle.rerender(
+      <InboxComponent {...listProps} activeThreadId="thr_new" />,
+    );
+
+    await waitFor(() =>
+      expect(membership).toEqual({
+        workspaceId: "workspace_landing",
+        projectId: "proj_2",
+        threadId: "thr_new",
+      }),
+    );
+    expect(await screen.findByText("New landing thread")).toBeDefined();
+  });
+
+  it("retries automatic workspace assignment after a workspace refresh", async () => {
+    const visibleThreads = [
+      thread({ id: "thr_existing", title: "Existing thread" }),
+    ];
+    let workspaces = [
+      {
+        id: "workspace_landing",
+        name: "Landing",
+        projectIds: [] as string[],
+        threadIds: [] as string[],
+      },
+    ];
+    let attempts = 0;
+    const slot = renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: visibleThreads,
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({
+          workspaces: workspaces.map((workspace) => ({ ...workspace })),
+        }),
+        addCreatedThreadToWorkspace: (input) => {
+          attempts += 1;
+          if (attempts === 1) return Promise.reject(new Error("offline"));
+          const membership = input as {
+            projectId: string;
+            threadId: string;
+          };
+          const workspace = {
+            ...workspaces[0]!,
+            projectIds: [membership.projectId],
+            threadIds: [membership.threadId],
+          };
+          workspaces = [workspace];
+          return { workspace };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Landing" }));
+    visibleThreads.push(thread({ id: "thr_new", title: "New thread" }));
+    slot.lifecycle.rerender(
+      <InboxComponent {...listProps} activeThreadId="thr_new" />,
+    );
+
+    expect(
+      await screen.findByText("Could not add new thread to workspace."),
+    ).toBeDefined();
+    expect(attempts).toBe(1);
+
+    await slot.behavior.emitRealtime("workspaces", {});
+    await waitFor(() => expect(attempts).toBe(2));
+    expect(await screen.findByText("New thread")).toBeDefined();
+  });
+
+  it("highlights the active workspace without border bars", async () => {
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ id: "landing", title: "Hero copy" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({
+          workspaces: [
+            {
+              id: "workspace_landing",
+              name: "Landing",
+              projectIds: ["proj_1"],
+              threadIds: ["landing"],
+            },
+          ],
+        }),
+      }),
+      settings: testSettings(),
+    });
+
+    const landing = await screen.findByRole("button", { name: "Landing" });
+    expect(landing.className).not.toContain("border-b-2");
+
+    fireEvent.click(landing);
+    expect(landing.className).toContain("bg-sidebar-accent");
+    expect(landing.className).not.toContain("border-primary");
+  });
+
   it("does not include a project's threads until they are selected", async () => {
     renderSlot(inbox, listProps, {
       sidebarThreads: {
@@ -412,6 +673,58 @@ describe("ThreadInbox", () => {
       await screen.findByRole("button", { name: "Landing page" }),
     ).toBeDefined();
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("creates an empty workspace without selecting projects or threads", async () => {
+    let saved:
+      | {
+          workspaceId: string | null;
+          name: string;
+          projectIds: string[];
+          threadIds: string[];
+        }
+      | undefined;
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [thread({ title: "Existing thread" })],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        saveWorkspace: (input) => {
+          saved = input as typeof saved;
+          return {
+            workspace: {
+              id: "workspace_empty",
+              name: saved!.name,
+              projectIds: saved!.projectIds,
+              threadIds: saved!.threadIds,
+            },
+          };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Add workspace" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "New workspace" });
+    fireEvent.change(within(dialog).getByLabelText("Workspace name"), {
+      target: { value: "Empty" },
+    });
+    const create = within(dialog).getByRole("button", { name: "Create" });
+    expect((create as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(create);
+
+    await waitFor(() =>
+      expect(saved).toEqual({
+        workspaceId: null,
+        name: "Empty",
+        projectIds: [],
+        threadIds: [],
+      }),
+    );
   });
 
   it("renames a workspace and changes its membership", async () => {
@@ -532,9 +845,10 @@ describe("ThreadInbox", () => {
     );
 
     await waitFor(() => expect(deleted).toBe("workspace_linux"));
-    expect(
-      await screen.findByRole("button", { name: "All projects" }),
-    ).toBeDefined();
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Linux" })).toBeNull(),
+    );
+    expect(screen.getByText("A thread")).toBeDefined();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
@@ -622,7 +936,7 @@ describe("ThreadInbox", () => {
     expect(document.activeElement).toBe(addWorkspace);
   });
 
-  it("scopes to one project", () => {
+  it("shows every project without a project scope picker", () => {
     render(
       [
         thread({ id: "a", title: "In bb", projectId: "proj_1" }),
@@ -633,11 +947,10 @@ describe("ThreadInbox", () => {
         { id: "proj_2", name: "other", isPersonal: false },
       ],
     );
-    // Radix opens on keyboard too, which jsdom can drive without pointer
-    // capture. Enter opens the list; the option click picks the scope.
-    fireEvent.keyDown(screen.getByLabelText(/Project scope/), { key: "Enter" });
-    fireEvent.click(screen.getByRole("option", { name: "other" }));
-    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+
+    expect(screen.queryByLabelText(/Project scope/)).toBeNull();
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByText("In bb")).toBeDefined();
     expect(screen.getByText("In other")).toBeDefined();
   });
 

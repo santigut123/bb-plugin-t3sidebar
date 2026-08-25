@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
@@ -9,13 +9,6 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./components/Select";
 import { ThreadCard } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
 import { useLifecycle, isWorking } from "./useLifecycle";
@@ -35,10 +28,10 @@ import {
 import { TRAILING_GLYPH_BOX_CLASS } from "./StatusSlot";
 import { statusPresentation } from "./StatusGlyph";
 import { useTurnStarts } from "./useTurnStarts";
+import { useWorkOrder } from "./useWorkOrder";
 import { WorkspaceTabs } from "./WorkspaceTabs";
 import { useWorkspaces } from "./useWorkspaces";
 import {
-  filterByProject,
   hideCollapsedDescendants,
   partitionPinned,
   searchThreadsByTitle,
@@ -47,14 +40,12 @@ import {
   visibleInboxThreads,
 } from "./inbox";
 
-const ALL_PROJECTS = "__all__";
-
 /**
- * The sidebar's scrolling list: stable root cards with descendants beneath.
+ * The sidebar's scrolling list: recently working families with descendants beneath.
  *
  * The host owns the New-thread button and the search field above it, so this
- * ships neither. It filters by the `searchQuery` prop and adds the controls
- * the host has no equivalent for: workspaces and the project scope picker.
+ * ships neither. It filters by the `searchQuery` prop and adds workspace
+ * controls that the host has no equivalent for.
  */
 export function ThreadInbox({
   activeThreadId,
@@ -65,6 +56,11 @@ export function ThreadInbox({
   const actions = useSidebarThreadActions();
   const lifecycle = useLifecycle(threads);
   const projectColors = useProjectColors();
+  const workOrderThreadIds = useMemo(
+    () => visibleInboxThreads(threads).map((thread) => thread.id),
+    [threads],
+  );
+  const workOrder = useWorkOrder(workOrderThreadIds);
   const workspaces = useWorkspaces();
   const { values: settingsValues } = useSettings();
   const workingShimmer = parseWorkingShimmerVariant(
@@ -85,10 +81,12 @@ export function ThreadInbox({
   const unreadTitleWeight = parseUnreadTitleWeight(
     settingsValues?.[UNREAD_TITLE_WEIGHT_SETTING_KEY],
   );
-  const [scope, setScope] = useState<string>(ALL_PROJECTS);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(
     null,
   );
+  const [workspaceMembershipError, setWorkspaceMembershipError] = useState<
+    string | null
+  >(null);
   // One clock for every card in a render, quantized to the minute so the
   // labels do not disagree and do not churn on unrelated re-renders.
   const [nowMinute, setNowMinute] = useState(() =>
@@ -117,27 +115,102 @@ export function ThreadInbox({
     workspaces.workspaces.find(
       (workspace) => workspace.id === activeWorkspaceId,
     ) ?? null;
-  const workspaceProjectIds = useMemo(
-    () =>
-      activeWorkspace === null ? null : new Set(activeWorkspace.projectIds),
-    [activeWorkspace],
+  const previousActiveThreadId = useRef(activeThreadId);
+  const newThreadBaseline = useRef(
+    new Set(threads.map((thread) => thread.id)),
   );
+  const newThreadWorkspaceId = useRef<string | null>(null);
+  const pendingWorkspaceAssignments = useRef(
+    new Map<string, { workspaceId: string; threadId: string }>(),
+  );
+  const workspaceAssignmentsInFlight = useRef(new Set<string>());
+  const threadIdsKey = JSON.stringify(threads.map((thread) => thread.id));
+
+  // The host owns New Thread. Capture the selected workspace while this client
+  // is on that screen, then queue only the new active root from this client.
+  useEffect(() => {
+    const previous = previousActiveThreadId.current;
+    previousActiveThreadId.current = activeThreadId;
+
+    if (activeThreadId === null) {
+      if (previous !== null) {
+        newThreadBaseline.current = new Set(
+          threads.map((thread) => thread.id),
+        );
+        setWorkspaceMembershipError(null);
+      }
+      newThreadWorkspaceId.current = activeWorkspace?.id ?? null;
+      return;
+    }
+
+    const workspaceId = newThreadWorkspaceId.current;
+    if (
+      previous === null &&
+      workspaceId !== null &&
+      !newThreadBaseline.current.has(activeThreadId)
+    ) {
+      pendingWorkspaceAssignments.current.set(activeThreadId, {
+        workspaceId,
+        threadId: activeThreadId,
+      });
+    }
+  }, [activeThreadId, activeWorkspace, threads]);
+
+  useEffect(() => {
+    if (status !== "ready") return;
+
+    const workspaceById = new Map(
+      workspaces.workspaces.map((workspace) => [workspace.id, workspace]),
+    );
+    const threadById = new Map(threads.map((thread) => [thread.id, thread]));
+    const assignments = [
+      ...pendingWorkspaceAssignments.current.values(),
+    ].flatMap((assignment) => {
+      const workspace = workspaceById.get(assignment.workspaceId);
+      if (!workspace) {
+        pendingWorkspaceAssignments.current.delete(assignment.threadId);
+        return [];
+      }
+      const thread = threadById.get(assignment.threadId);
+      if (!thread) return [];
+      if (
+        thread.parentThreadId !== null ||
+        workspace.threadIds.includes(assignment.threadId)
+      ) {
+        pendingWorkspaceAssignments.current.delete(assignment.threadId);
+        return [];
+      }
+      if (workspaceAssignmentsInFlight.current.has(assignment.threadId)) {
+        return [];
+      }
+      return [{ ...assignment, projectId: thread.projectId }];
+    });
+    if (assignments.length === 0) return;
+
+    setWorkspaceMembershipError(null);
+    assignments.forEach((assignment) => {
+      workspaceAssignmentsInFlight.current.add(assignment.threadId);
+      void workspaces
+        .addCreatedThread({
+          workspaceId: assignment.workspaceId,
+          projectId: assignment.projectId,
+          threadId: assignment.threadId,
+        })
+        .then(() =>
+          pendingWorkspaceAssignments.current.delete(assignment.threadId),
+        )
+        .catch(() =>
+          setWorkspaceMembershipError("Could not add new thread to workspace."),
+        )
+        .finally(() =>
+          workspaceAssignmentsInFlight.current.delete(assignment.threadId),
+        );
+    });
+  }, [activeThreadId, status, threadIdsKey, threads, workspaces]);
   const workspaceThreadIds = useMemo(
     () => (activeWorkspace === null ? null : new Set(activeWorkspace.threadIds)),
     [activeWorkspace],
   );
-  const visibleProjects = useMemo(
-    () =>
-      workspaceProjectIds === null
-        ? projects
-        : projects.filter((project) => workspaceProjectIds.has(project.id)),
-    [projects, workspaceProjectIds],
-  );
-  const effectiveScope =
-    scope === ALL_PROJECTS ||
-    visibleProjects.some((project) => project.id === scope)
-      ? scope
-      : ALL_PROJECTS;
 
   const { pinned, inbox, snoozed, settled } = useMemo(() => {
     const workspaceThreads =
@@ -146,11 +219,7 @@ export function ThreadInbox({
         : visibleInboxThreads(threads).filter((thread) =>
             workspaceThreadIds.has(thread.id),
           );
-    const scoped = filterByProject(
-      workspaceThreads,
-      effectiveScope === ALL_PROJECTS ? null : effectiveScope,
-    );
-    const matched = searchThreadsByTitle(scoped, searchQuery);
+    const matched = searchThreadsByTitle(workspaceThreads, searchQuery);
     const active: typeof matched = [];
     const onSnoozeShelf: typeof matched = [];
     const onSettledShelf: typeof matched = [];
@@ -162,8 +231,8 @@ export function ThreadInbox({
     }
     const split = partitionPinned(active);
     return {
-      pinned: sortByThreadHierarchy(split.pinned),
-      inbox: sortByThreadHierarchy(split.inbox),
+      pinned: sortByThreadHierarchy(split.pinned, workOrder),
+      inbox: sortByThreadHierarchy(split.inbox, workOrder),
       // Soonest wake first: "what comes back next" is the shelf's question.
       snoozed: [...onSnoozeShelf].sort(
         (left, right) =>
@@ -171,7 +240,13 @@ export function ThreadInbox({
       ),
       settled: sortByCreatedAtDescending(onSettledShelf),
     };
-  }, [effectiveScope, lifecycle, searchQuery, threads, workspaceThreadIds]);
+  }, [
+    lifecycle,
+    searchQuery,
+    threads,
+    workOrder,
+    workspaceThreadIds,
+  ]);
 
   const displayedPinned = hideCollapsedDescendants(
     pinned,
@@ -205,12 +280,7 @@ export function ThreadInbox({
     });
   };
 
-  const scopeLabel =
-    effectiveScope === ALL_PROJECTS
-      ? "All projects"
-      : (projectNameById.get(effectiveScope) ?? "All projects");
-  const showProjectAccent =
-    projectColorStripes && effectiveScope === ALL_PROJECTS;
+  const showProjectAccent = projectColorStripes;
   let emptyThreadMessage = "No threads yet";
   if (searchQuery.trim()) emptyThreadMessage = "No threads found";
   else if (activeWorkspace !== null) {
@@ -253,43 +323,16 @@ export function ThreadInbox({
     <div className="flex min-h-0 flex-1 flex-col">
       <WorkspaceTabs
         activeWorkspaceId={activeWorkspace?.id ?? null}
-        onActiveWorkspaceChange={(workspaceId) => {
-          setActiveWorkspaceId(workspaceId);
-          setScope(ALL_PROJECTS);
-        }}
+        onActiveWorkspaceChange={setActiveWorkspaceId}
         projects={projects}
         threads={threads}
         workspaces={workspaces}
       />
-      {/* Everything else in the chrome above — New thread, search — is bb's
-          and stays bb's. */}
-      <div className="flex shrink-0 items-center gap-1 px-2 pb-1">
-        <Select value={effectiveScope} onValueChange={setScope}>
-          {/* Ghost trigger: no border, no filled track — it reads as a label
-              until you hover it. */}
-          <SelectTrigger
-            className="h-7 min-w-0 flex-1 border-0 px-1.5 py-1 text-xs font-medium text-muted-foreground shadow-none hover:bg-sidebar-accent focus:ring-0"
-            aria-label={`Project scope: ${scopeLabel}`}
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_PROJECTS} className="text-xs">
-              All projects
-            </SelectItem>
-            {visibleProjects.map((project) => (
-              <SelectItem
-                key={project.id}
-                value={project.id}
-                className="text-xs"
-              >
-                {project.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
+      {workspaceMembershipError ? (
+        <p role="alert" className="px-3 py-1 text-xs text-destructive-text">
+          {workspaceMembershipError}
+        </p>
+      ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
         {status === "loading" ? null : status === "error" ? (
           <p
