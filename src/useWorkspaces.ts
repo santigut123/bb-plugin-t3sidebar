@@ -11,6 +11,7 @@ export interface Workspace {
   name: string;
   projectIds: string[];
   threadIds: string[];
+  hiddenFromAll: boolean;
 }
 
 export interface WorkspacesApi {
@@ -31,6 +32,10 @@ export interface WorkspacesApi {
     workspaceId: string;
     projectId: string;
     threadId: string;
+  }): Promise<Workspace>;
+  setHiddenFromAll(input: {
+    workspaceId: string;
+    hiddenFromAll: boolean;
   }): Promise<Workspace>;
   delete(workspaceId: string): Promise<void>;
 }
@@ -105,6 +110,15 @@ export function useWorkspaces(): WorkspacesApi {
     [refresh, rpc],
   );
 
+  const setHiddenFromAll = useCallback(
+    async (input: { workspaceId: string; hiddenFromAll: boolean }) => {
+      const result = await rpc.call("setWorkspaceHiddenFromAll", input);
+      await refresh();
+      return result.workspace;
+    },
+    [refresh, rpc],
+  );
+
   const deleteWorkspace = useCallback(
     async (workspaceId: string) => {
       await rpc.call("deleteWorkspace", { workspaceId });
@@ -119,8 +133,16 @@ export function useWorkspaces(): WorkspacesApi {
       save,
       setThreadMembership,
       addCreatedThread,
+      setHiddenFromAll,
       delete: deleteWorkspace,
     }),
-    [addCreatedThread, deleteWorkspace, save, setThreadMembership, workspaces],
+    [
+      addCreatedThread,
+      deleteWorkspace,
+      save,
+      setHiddenFromAll,
+      setThreadMembership,
+      workspaces,
+    ],
   );
 }

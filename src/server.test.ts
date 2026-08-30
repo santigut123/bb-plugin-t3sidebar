@@ -74,6 +74,72 @@ describe("lifecycle RPC", () => {
 });
 
 describe("workspace RPC", () => {
+  it("persists whether a workspace is hidden from All projects", async () => {
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "t3sidebar",
+      sdk: {
+        subscribe: () => () => {},
+        threads: { events: { list: async () => [] } },
+      },
+    });
+    await plugin(bb);
+
+    const created = (await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: null,
+      name: "Focused work",
+      projectIds: ["proj_1"],
+      threadIds: ["thr_1"],
+    })) as { workspace: { id: string; hiddenFromAll: boolean } };
+    expect(created.workspace.hiddenFromAll).toBe(false);
+
+    const hidden = await harness.behavior.callRpc(
+      "setWorkspaceHiddenFromAll",
+      {
+        workspaceId: created.workspace.id,
+        hiddenFromAll: true,
+      },
+    );
+    expect(hidden).toEqual({
+      workspace: expect.objectContaining({
+        id: created.workspace.id,
+        hiddenFromAll: true,
+      }),
+    });
+    expect(harness.inspection.realtimeSignals.at(-1)).toEqual({
+      channel: WORKSPACES_CHANNEL,
+      payload: { workspaceId: created.workspace.id },
+    });
+    expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
+      workspaces: [
+        expect.objectContaining({
+          id: created.workspace.id,
+          hiddenFromAll: true,
+        }),
+      ],
+    });
+    await harness.behavior.callRpc("saveWorkspace", {
+      workspaceId: created.workspace.id,
+      name: "Focused work renamed",
+      projectIds: ["proj_1"],
+      threadIds: ["thr_1"],
+    });
+    await harness.behavior.callRpc("setWorkspaceThreadMembership", {
+      workspaceId: created.workspace.id,
+      projectId: "proj_2",
+      threadId: "thr_2",
+      included: true,
+    });
+    expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
+      workspaces: [
+        expect.objectContaining({
+          id: created.workspace.id,
+          hiddenFromAll: true,
+        }),
+      ],
+    });
+    await harness.lifecycle.dispose();
+  });
+
   it("creates an empty workspace without projects or threads", async () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "t3sidebar",
@@ -97,6 +163,7 @@ describe("workspace RPC", () => {
         name: "Empty",
         projectIds: [],
         threadIds: [],
+        hiddenFromAll: false,
       },
     });
     await harness.lifecycle.dispose();
@@ -131,6 +198,7 @@ describe("workspace RPC", () => {
       name: "Landing page",
       projectIds: ["proj_marketing", "proj_pricing"],
       threadIds: ["thr_hero", "thr_pricing"],
+      hiddenFromAll: false,
     });
     expect(await harness.behavior.callRpc("listWorkspaces", {})).toEqual({
       workspaces: [created.workspace],
@@ -148,6 +216,7 @@ describe("workspace RPC", () => {
         name: "Launch",
         projectIds: ["proj_pricing"],
         threadIds: ["thr_pricing"],
+        hiddenFromAll: false,
       },
     });
 
@@ -166,12 +235,14 @@ describe("workspace RPC", () => {
         name: "Launch",
         projectIds: ["proj_pricing"],
         threadIds: ["thr_pricing"],
+        hiddenFromAll: false,
       },
       {
         id: sibling.workspace.id,
         name: "Pricing experiment",
         projectIds: ["proj_pricing"],
         threadIds: ["thr_pricing_experiment"],
+        hiddenFromAll: false,
       },
     ]);
 
@@ -243,6 +314,7 @@ describe("workspace RPC", () => {
           name: "Shared work",
           projectIds: ["proj_base", "proj_landing", "proj_linux"],
           threadIds: ["thr_base", "thr_linux"],
+          hiddenFromAll: false,
         },
       ],
     });
@@ -288,12 +360,14 @@ describe("workspace RPC", () => {
           name: "Inherited",
           projectIds: ["proj_parent", "proj_child"],
           threadIds: ["thr_parent", "thr_child"],
+          hiddenFromAll: false,
         },
         {
           id: unrelated.workspace.id,
           name: "Unrelated",
           projectIds: ["proj_other"],
           threadIds: ["thr_other"],
+          hiddenFromAll: false,
         },
       ],
     });
@@ -360,6 +434,7 @@ describe("workspace RPC", () => {
             "thr_child",
             "thr_grandchild",
           ],
+          hiddenFromAll: false,
         },
       ],
     });

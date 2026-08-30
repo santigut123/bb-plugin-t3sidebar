@@ -28,6 +28,7 @@ export function WorkspaceTabs({
   const addWorkspaceButton = useRef<HTMLButtonElement>(null);
   const editorTrigger = useRef<HTMLElement | null>(null);
   const workspaceButtons = useRef(new Map<string, HTMLButtonElement>());
+  const [visibilityError, setVisibilityError] = useState<string | null>(null);
   const portalScope = usePortalScopeProps();
 
   return (
@@ -49,6 +50,8 @@ export function WorkspaceTabs({
           ) : (
             workspaces.workspaces.map((workspace) => {
               const active = workspace.id === activeWorkspaceId;
+              const hiddenInAllProjects =
+                workspace.hiddenFromAll && activeWorkspaceId === null;
               const accent = projectAccentFromHue(hashHue(workspace.id));
               return (
                 <ContextMenu.Root key={workspace.id}>
@@ -62,12 +65,18 @@ export function WorkspaceTabs({
                         }
                       }}
                       type="button"
+                      aria-label={
+                        hiddenInAllProjects
+                          ? `${workspace.name}, hidden from All projects`
+                          : workspace.name
+                      }
                       aria-pressed={active}
                       className={cn(
                         "my-1 flex shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors",
                         active
                           ? "bg-sidebar-accent text-foreground"
                           : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+                        hiddenInAllProjects && "opacity-70",
                       )}
                       onClick={() =>
                         onActiveWorkspaceChange(active ? null : workspace.id)
@@ -79,6 +88,15 @@ export function WorkspaceTabs({
                         style={{ backgroundColor: accent.stripe }}
                       />
                       {workspace.name}
+                      {hiddenInAllProjects ? (
+                        <span
+                          aria-hidden="true"
+                          title="Hidden from All projects"
+                          className="font-semibold text-muted-foreground"
+                        >
+                          ⊘
+                        </span>
+                      ) : null}
                     </button>
                   </ContextMenu.Trigger>
                   <ContextMenu.Portal>
@@ -96,6 +114,28 @@ export function WorkspaceTabs({
                         }}
                       >
                         Edit workspace
+                      </ContextMenu.Item>
+                      <ContextMenu.Item
+                        className="cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
+                        onSelect={() => {
+                          setVisibilityError(null);
+                          void workspaces
+                            .setHiddenFromAll({
+                              workspaceId: workspace.id,
+                              hiddenFromAll: !workspace.hiddenFromAll,
+                            })
+                            .catch((reason: unknown) => {
+                              setVisibilityError(
+                                reason instanceof Error
+                                  ? reason.message
+                                  : "Could not update workspace visibility.",
+                              );
+                            });
+                        }}
+                      >
+                        {workspace.hiddenFromAll
+                          ? "Show in All projects"
+                          : "Hide from All projects"}
                       </ContextMenu.Item>
                     </ContextMenu.Content>
                   </ContextMenu.Portal>
@@ -117,6 +157,11 @@ export function WorkspaceTabs({
           <Icon name="Plus" className="size-4" />
         </button>
       </div>
+      {visibilityError ? (
+        <p role="alert" className="px-3 py-1 text-xs text-destructive-text">
+          {visibilityError}
+        </p>
+      ) : null}
       {editor !== null ? (
         <WorkspaceEditor
           key={editor === "new" ? "new" : editor.id}

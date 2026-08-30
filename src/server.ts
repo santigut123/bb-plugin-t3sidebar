@@ -30,6 +30,8 @@ const migrations = [
      thread_id  TEXT PRIMARY KEY,
      started_at INTEGER NOT NULL
    )`,
+  `ALTER TABLE workspaces
+     ADD COLUMN hidden_from_all INTEGER NOT NULL DEFAULT 0`,
 ];
 
 export interface StoredLifecycleRow {
@@ -61,6 +63,7 @@ export interface StoredWorkspace {
   name: string;
   projectIds: string[];
   threadIds: string[];
+  hiddenFromAll: boolean;
 }
 
 interface WorkspaceDbRow {
@@ -68,6 +71,7 @@ interface WorkspaceDbRow {
   name: string;
   project_ids: string;
   thread_ids: string;
+  hidden_from_all: number;
 }
 
 interface WorkOrderDbRow {
@@ -86,6 +90,7 @@ const workspaceSchema = z.object({
   name: z.string(),
   projectIds: z.array(z.string()),
   threadIds: z.array(z.string()),
+  hiddenFromAll: z.boolean(),
 });
 
 export const t3sidebarRpcContract = defineRpcContract({
@@ -188,6 +193,13 @@ export const t3sidebarRpcContract = defineRpcContract({
       workspaceId: z.string().trim().min(1),
       projectId: z.string().trim().min(1),
       threadId: z.string().trim().min(1),
+    }),
+    output: z.object({ workspace: workspaceSchema }),
+  },
+  setWorkspaceHiddenFromAll: {
+    input: z.object({
+      workspaceId: z.string().trim().min(1),
+      hiddenFromAll: z.boolean(),
     }),
     output: z.object({ workspace: workspaceSchema }),
   },
@@ -323,7 +335,7 @@ export default function plugin(bb: BbPluginApi) {
     (
       db
         .prepare(
-          `SELECT id, name, project_ids, thread_ids
+          `SELECT id, name, project_ids, thread_ids, hidden_from_all
              FROM workspaces
             ORDER BY position, id`,
         )
@@ -333,6 +345,7 @@ export default function plugin(bb: BbPluginApi) {
       name: row.name,
       projectIds: JSON.parse(row.project_ids) as string[],
       threadIds: JSON.parse(row.thread_ids) as string[],
+      hiddenFromAll: row.hidden_from_all === 1,
     }));
 
   const setWorkspaceThreadMembership = db.transaction(
@@ -344,7 +357,7 @@ export default function plugin(bb: BbPluginApi) {
     ): StoredWorkspace => {
       const row = db
         .prepare(
-          `SELECT id, name, project_ids, thread_ids
+          `SELECT id, name, project_ids, thread_ids, hidden_from_all
              FROM workspaces
             WHERE id = ?`,
         )
@@ -365,6 +378,7 @@ export default function plugin(bb: BbPluginApi) {
         name: row.name,
         projectIds: [...projectIds],
         threadIds: [...threadIds],
+        hiddenFromAll: row.hidden_from_all === 1,
       };
       db.prepare(
         `UPDATE workspaces
@@ -561,11 +575,25 @@ export default function plugin(bb: BbPluginApi) {
       return { workspaces: readWorkspaces() };
     },
     async saveWorkspace({ workspaceId, name, projectIds, threadIds }) {
+      const existing =
+        workspaceId === null
+          ? undefined
+          : (db
+              .prepare(
+                `SELECT hidden_from_all
+                   FROM workspaces
+                  WHERE id = ?`,
+              )
+              .get(workspaceId) as Pick<
+              WorkspaceDbRow,
+              "hidden_from_all"
+            > | undefined);
       const workspace: StoredWorkspace = {
         id: workspaceId ?? `workspace_${crypto.randomUUID()}`,
         name: name.trim(),
         projectIds: [...new Set(projectIds)],
         threadIds: [...new Set(threadIds)],
+        hiddenFromAll: existing?.hidden_from_all === 1,
       };
       if (workspaceId === null) {
         db.prepare(
@@ -623,6 +651,22 @@ export default function plugin(bb: BbPluginApi) {
         projectId,
         threadId,
       );
+      return { workspace };
+    },
+    async setWorkspaceHiddenFromAll({ workspaceId, hiddenFromAll }) {
+      const result = db
+        .prepare(
+          `UPDATE workspaces
+              SET hidden_from_all = ?
+            WHERE id = ?`,
+        )
+        .run(hiddenFromAll ? 1 : 0, workspaceId);
+      if (result.changes === 0) throw new Error("Workspace not found.");
+      const workspace = readWorkspaces().find(
+        (candidate) => candidate.id === workspaceId,
+      );
+      if (!workspace) throw new Error("Workspace not found.");
+      publishWorkspace(workspaceId);
       return { workspace };
     },
     async deleteWorkspace({ workspaceId }) {

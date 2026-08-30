@@ -400,6 +400,109 @@ describe("ThreadInbox", () => {
     expect(screen.queryByText("Hero copy")).toBeNull();
   });
 
+  it("hides a workspace's threads only from All projects and marks its tab", async () => {
+    let workspaces = [
+      {
+        id: "workspace_landing",
+        name: "Landing",
+        projectIds: ["proj_1"],
+        threadIds: ["landing"],
+        hiddenFromAll: false,
+      },
+      {
+        id: "workspace_shared",
+        name: "Shared",
+        projectIds: ["proj_1"],
+        threadIds: ["landing", "other"],
+        hiddenFromAll: false,
+      },
+    ];
+    renderSlot(inbox, listProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads: [
+          thread({ id: "landing", title: "Hero copy" }),
+          thread({ id: "other", title: "Other work" }),
+        ],
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc({
+        listWorkspaces: () => ({ workspaces }),
+        setWorkspaceHiddenFromAll: (input) => {
+          const { workspaceId, hiddenFromAll } = input as {
+            workspaceId: string;
+            hiddenFromAll: boolean;
+          };
+          workspaces = workspaces.map((workspace) =>
+            workspace.id === workspaceId
+              ? { ...workspace, hiddenFromAll }
+              : workspace,
+          );
+          return {
+            workspace: workspaces.find(
+              (workspace) => workspace.id === workspaceId,
+            ),
+          };
+        },
+      }),
+      settings: testSettings(),
+    });
+
+    const landing = await screen.findByRole("button", { name: "Landing" });
+    fireEvent.contextMenu(landing);
+    fireEvent.click(
+      within(
+        await screen.findByRole("menu", {
+          name: "Landing workspace actions",
+        }),
+      ).getByText("Hide from All projects"),
+    );
+
+    await waitFor(() => expect(screen.queryByText("Hero copy")).toBeNull());
+    expect(screen.getByText("Other work")).toBeDefined();
+    const hiddenLanding = screen.getByRole("button", {
+      name: "Landing, hidden from All projects",
+    });
+    expect(
+      within(hiddenLanding).getByTitle("Hidden from All projects"),
+    ).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Shared" }));
+    expect(screen.getByText("Hero copy")).toBeDefined();
+    expect(screen.getByText("Other work")).toBeDefined();
+    expect(screen.queryByTitle("Hidden from All projects")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Shared" }));
+    expect(screen.queryByText("Hero copy")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Landing, hidden from All projects",
+      }),
+    );
+    expect(screen.getByText("Hero copy")).toBeDefined();
+    expect(screen.queryByText("Other work")).toBeNull();
+    expect(screen.getByRole("button", { name: "Landing" })).toBeDefined();
+    expect(screen.queryByTitle("Hidden from All projects")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Landing" }));
+    expect(screen.queryByText("Hero copy")).toBeNull();
+    fireEvent.contextMenu(
+      screen.getByRole("button", {
+        name: "Landing, hidden from All projects",
+      }),
+    );
+    fireEvent.click(
+      within(
+        await screen.findByRole("menu", {
+          name: "Landing workspace actions",
+        }),
+      ).getByText("Show in All projects"),
+    );
+
+    await waitFor(() => expect(screen.getByText("Hero copy")).toBeDefined());
+    expect(screen.getByRole("button", { name: "Landing" })).toBeDefined();
+  });
+
   it("adds only a locally created root thread to the active workspace", async () => {
     const visibleThreads = [
       thread({ id: "thr_existing", title: "Existing thread" }),
