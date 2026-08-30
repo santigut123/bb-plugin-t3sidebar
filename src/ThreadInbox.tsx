@@ -211,11 +211,22 @@ export function ThreadInbox({
     () => (activeWorkspace === null ? null : new Set(activeWorkspace.threadIds)),
     [activeWorkspace],
   );
+  const hiddenWorkspaceThreadIds = useMemo(
+    () =>
+      new Set(
+        workspaces.workspaces
+          .filter((workspace) => workspace.hiddenFromAll)
+          .flatMap((workspace) => workspace.threadIds),
+      ),
+    [workspaces.workspaces],
+  );
 
   const { pinned, inbox, snoozed, settled } = useMemo(() => {
     const workspaceThreads =
       workspaceThreadIds === null
-        ? visibleInboxThreads(threads)
+        ? visibleInboxThreads(threads).filter(
+            (thread) => !hiddenWorkspaceThreadIds.has(thread.id),
+          )
         : visibleInboxThreads(threads).filter((thread) =>
             workspaceThreadIds.has(thread.id),
           );
@@ -242,6 +253,7 @@ export function ThreadInbox({
     };
   }, [
     lifecycle,
+    hiddenWorkspaceThreadIds,
     searchQuery,
     threads,
     workOrder,

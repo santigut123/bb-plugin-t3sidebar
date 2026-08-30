@@ -10,6 +10,9 @@
   clicking the selected workspace returns to the all-threads view.
 - Thread context menus can add or remove an individual thread directly.
 - The Settled shelf now has a right-click action to archive all settled threads.
+- Workspace context menus can hide their threads from All projects while
+  keeping every workspace selectable and visibly marking hidden workspaces in
+  the unfiltered view.
 
 ### Changed
 

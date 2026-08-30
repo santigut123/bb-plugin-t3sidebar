@@ -33,6 +33,13 @@ stored in the plugin's SQLite database. A thread created while a workspace is
 selected is added to that workspace automatically. Threads created by an
 existing thread inherit every workspace containing their parent.
 
+Right-click a workspace and choose **Hide from All projects** to keep its
+threads out of the unfiltered inbox. The workspace tab remains visible and is
+marked as hidden while viewing All projects; selecting any workspace still
+shows that workspace's complete thread membership. Use **Show in All projects**
+from the same menu to restore the threads. This preference is stored with the
+workspace and shared across bb clients.
+
 ## The idea
 
 Pinned threads stay above the rest. When an unpinned thread starts working, its
