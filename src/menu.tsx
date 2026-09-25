@@ -98,7 +98,10 @@ export function ActionsMenu({
           if (event.pointerType !== "mouse") event.preventDefault();
         }}
         onClick={() => {
+          // Radix already toggled on a mouse's pointerdown. Anything else — a
+          // tap, or a click with no pointer at all — toggles here.
           if (pointerType.current !== "mouse") setOpen((current) => !current);
+          pointerType.current = "";
         }}
         className={cn(
           "flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground",

@@ -79,15 +79,18 @@ export function RowContextMenu({
   );
 }
 
-/** The same menu behind a visible button, for a finger. */
-export function RowActionsMenu({
-  className,
-  ...menu
-}: ThreadMenuProps & { className?: string }) {
+/**
+ * The same menu behind a visible button, for a finger. It sits in the row's
+ * right-hand gutter, beside the right-click trigger rather than inside it:
+ * React bubbles events out of a portal along the component tree, so a long
+ * press on one of this menu's items would otherwise open the row's context
+ * menu on top of it.
+ */
+export function RowActionsMenu(menu: ThreadMenuProps) {
   return (
     <ActionsMenu
       label={`Actions for ${threadDisplayTitle(menu.thread)}`}
-      className={className}
+      className="absolute right-0.5 top-1/2 z-[2] -translate-y-1/2"
     >
       <ThreadMenuItems kit={DropdownMenu} {...menu} />
     </ActionsMenu>

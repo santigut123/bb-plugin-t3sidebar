@@ -1531,6 +1531,38 @@ describe("compact viewport", () => {
     await waitFor(() => expect(settled).toBe("thr_park"));
   });
 
+  it("keeps a press inside the actions menu from opening the row's menu", async () => {
+    renderCompact([thread({ id: "thr_park", title: "Quiet" })]);
+    const menu = await openActions("Actions for Quiet");
+    // A long press on a touch screen fires contextmenu on the item under the
+    // finger; React would bubble it out of the portal to the row's trigger.
+    fireEvent.contextMenu(within(menu).getByText("Settle"));
+    expect(screen.queryByRole("menu", { name: "Thread actions" })).toBeNull();
+    expect(screen.getByRole("menu", { name: "Actions for Quiet" })).toBeDefined();
+  });
+
+  it("opens once for a mouse and once for a tap", async () => {
+    renderCompact([thread({ id: "thr_park", title: "Quiet" })]);
+    const button = await screen.findByRole("button", {
+      name: "Actions for Quiet",
+    });
+    const name = "Actions for Quiet";
+
+    // A mouse opens on pointerdown; the click that follows must not close it.
+    fireEvent.pointerDown(button, { pointerType: "mouse", button: 0 });
+    fireEvent.click(button, { detail: 1 });
+    expect(await screen.findByRole("menu", { name })).toBeDefined();
+    fireEvent.keyDown(screen.getByRole("menu", { name }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu", { name })).toBeNull());
+
+    // A finger does nothing on pointerdown, so a scroll starting here stays a
+    // scroll; the tap's click opens it.
+    fireEvent.pointerDown(button, { pointerType: "touch", button: 0 });
+    expect(screen.queryByRole("menu", { name })).toBeNull();
+    fireEvent.click(button, { detail: 1 });
+    expect(await screen.findByRole("menu", { name })).toBeDefined();
+  });
+
   it("snoozes from the actions menu", async () => {
     let snoozedUntil: number | null = null;
     renderCompact([thread({ id: "thr_park", title: "Quiet" })], {

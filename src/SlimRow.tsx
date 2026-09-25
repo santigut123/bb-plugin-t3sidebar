@@ -72,8 +72,8 @@ export function SlimRow({
   };
 
   return (
-    <RowContextMenu {...menu}>
-      <li className="list-none">
+    <li className="relative list-none">
+      <RowContextMenu {...menu}>
         <div
           className={cn(
             "group/slim relative flex h-8 items-center gap-2 rounded-md px-2.5 text-xs",
@@ -160,14 +160,9 @@ export function SlimRow({
               </button>
             )}
           </span>
-          {compact ? (
-            <RowActionsMenu
-              {...menu}
-              className="absolute right-0.5 top-1/2 z-[2] -translate-y-1/2"
-            />
-          ) : null}
         </div>
-      </li>
-    </RowContextMenu>
+      </RowContextMenu>
+      {compact ? <RowActionsMenu {...menu} /> : null}
+    </li>
   );
 }

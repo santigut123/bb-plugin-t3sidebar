@@ -112,13 +112,13 @@ export function ThreadCard({
   const showParkButtons = canPark && !compact;
 
   return (
-    <RowContextMenu {...menu}>
-      <li
-        className={cn(
-          "list-none",
-          isChild && "ml-4 border-l border-sidebar-border pl-1",
-        )}
-      >
+    <li
+      className={cn(
+        "relative list-none",
+        isChild && "ml-4 border-l border-sidebar-border pl-1",
+      )}
+    >
+      <RowContextMenu {...menu}>
         <div
           className={cn(
             "group/card relative overflow-hidden rounded-md py-2 pl-3 pr-2.5 transition-[background-color,opacity]",
@@ -287,15 +287,10 @@ export function ThreadCard({
               </button>
             ) : null}
           </div>
-          {compact ? (
-            <RowActionsMenu
-              {...menu}
-              className="absolute right-0.5 top-1/2 z-[2] -translate-y-1/2"
-            />
-          ) : null}
         </div>
-      </li>
-    </RowContextMenu>
+      </RowContextMenu>
+      {compact ? <RowActionsMenu {...menu} /> : null}
+    </li>
   );
 }
 
