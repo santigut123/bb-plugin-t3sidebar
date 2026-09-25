@@ -1,14 +1,22 @@
 import { useState } from "react";
-import * as ContextMenu from "@radix-ui/react-context-menu";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
+import { usePortalScopeProps } from "./lib/portal-scope";
 import { cn } from "./lib/utils";
+import {
+  MENU_CONTENT_CLASS,
+  MENU_ITEM_CLASS,
+  MENU_SUB_TRIGGER_CLASS,
+  type MenuKit,
+} from "./menu";
 import type { WorkspacesApi } from "./useWorkspaces";
 
 export function WorkspaceSubmenu({
+  kit,
   thread,
   workspaces,
 }: {
+  kit: MenuKit;
   thread: PluginSidebarThread;
   workspaces: WorkspacesApi;
 }) {
@@ -16,21 +24,21 @@ export function WorkspaceSubmenu({
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const portalScope = usePortalScopeProps();
 
   return (
-    <ContextMenu.Sub>
-      <ContextMenu.SubTrigger className="cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground">
-        Workspaces
-      </ContextMenu.SubTrigger>
-      <ContextMenu.Portal>
-        <ContextMenu.SubContent
+    <kit.Sub>
+      <kit.SubTrigger className={MENU_SUB_TRIGGER_CLASS}>Workspaces</kit.SubTrigger>
+      <kit.Portal>
+        <kit.SubContent
+          {...portalScope}
           aria-label="Workspaces"
-          className="z-50 w-56 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
+          className={cn(MENU_CONTENT_CLASS, "w-56")}
         >
           {workspaces.workspaces.map((workspace) => {
             const included = workspace.threadIds.includes(thread.id);
             return (
-              <ContextMenu.CheckboxItem
+              <kit.CheckboxItem
                 key={workspace.id}
                 checked={included}
                 disabled={pendingWorkspaceId !== null}
@@ -55,16 +63,15 @@ export function WorkspaceSubmenu({
                     .finally(() => setPendingWorkspaceId(null));
                 }}
                 className={cn(
-                  "relative flex cursor-pointer items-center rounded-md py-1.5 pl-7 pr-2 text-sm outline-none",
-                  "data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground",
-                  "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+                  MENU_ITEM_CLASS,
+                  "relative flex items-center pl-7",
                 )}
               >
-                <ContextMenu.ItemIndicator className="absolute left-2 flex size-4 items-center justify-center">
+                <kit.ItemIndicator className="absolute left-2 flex size-4 items-center justify-center">
                   <Icon name="Check" className="size-3.5" />
-                </ContextMenu.ItemIndicator>
+                </kit.ItemIndicator>
                 <span className="min-w-0 truncate">{workspace.name}</span>
-              </ContextMenu.CheckboxItem>
+              </kit.CheckboxItem>
             );
           })}
           {error ? (
@@ -72,8 +79,8 @@ export function WorkspaceSubmenu({
               {error}
             </p>
           ) : null}
-        </ContextMenu.SubContent>
-      </ContextMenu.Portal>
-    </ContextMenu.Sub>
+        </kit.SubContent>
+      </kit.Portal>
+    </kit.Sub>
   );
 }

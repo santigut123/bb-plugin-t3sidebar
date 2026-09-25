@@ -4,7 +4,11 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
 import { cn } from "./lib/utils";
-import { RowContextMenu } from "./RowContextMenu";
+import {
+  RowActionsMenu,
+  RowContextMenu,
+  type ThreadMenuProps,
+} from "./RowContextMenu";
 import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
 import { threadDisplayTitle } from "./inbox";
 import { snoozeWakeLabel } from "./lifecycle";
@@ -15,7 +19,9 @@ import type { WorkspacesApi } from "./useWorkspaces";
  * actually parking work, never from the sidebar guessing what still matters.
  *
  * Same structure as the card — a full-bleed anchor under the restore button,
- * because a `<button>` inside an `<a>` is invalid interactive nesting.
+ * because a `<button>` inside an `<a>` is invalid interactive nesting. A
+ * compact row swaps the hover-revealed restore button for the card's actions
+ * button, which puts restore one tap away.
  */
 export function SlimRow({
   thread,
@@ -32,6 +38,7 @@ export function SlimRow({
   onNavigate,
   onRestore,
   workspaces,
+  compact,
 }: {
   thread: PluginSidebarThread;
   projectName: string | null;
@@ -47,24 +54,31 @@ export function SlimRow({
   onNavigate: () => void;
   onRestore: () => void;
   workspaces: WorkspacesApi;
+  /** Phone-width or touch, from the host's `isCompactViewport`. */
+  compact: boolean;
 }) {
   const actions = useSidebarThreadActions();
   const title = threadDisplayTitle(thread);
+  const menu: ThreadMenuProps = {
+    thread,
+    projectName,
+    projectHue,
+    hasCustomProjectColor,
+    onSetProjectColor,
+    onResetProjectColor,
+    workspaces,
+    parking: { shelf, onRestore },
+    compact,
+  };
 
   return (
-    <RowContextMenu
-      thread={thread}
-      projectName={projectName}
-      projectHue={projectHue}
-      hasCustomProjectColor={hasCustomProjectColor}
-      onSetProjectColor={onSetProjectColor}
-      onResetProjectColor={onResetProjectColor}
-      workspaces={workspaces}
-    >
-      <li className="list-none">
+    <li className="relative list-none">
+      <RowContextMenu {...menu}>
         <div
           className={cn(
             "group/slim relative flex h-8 items-center gap-2 rounded-md px-2.5 text-xs",
+            // The card's actions column and a finger-sized row.
+            compact && "h-11 select-none pr-11",
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
           )}
         >
@@ -106,7 +120,12 @@ export function SlimRow({
               "pointer-events-none relative tabular-nums text-2xs text-muted-foreground/60",
             )}
           >
-            <span className="flex items-center group-hover/slim:opacity-0">
+            <span
+              className={cn(
+                "flex items-center",
+                !compact && "group-hover/slim:opacity-0",
+              )}
+            >
               {shelf === "snoozed" && wakeAt !== null ? (
                 snoozeWakeLabel(wakeAt, now)
               ) : (
@@ -117,28 +136,33 @@ export function SlimRow({
                 />
               )}
             </span>
-            <button
-              type="button"
-              aria-label={
-                shelf === "snoozed" ? "Wake thread now" : "Un-settle thread"
-              }
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onRestore();
-              }}
-              // Pulled right by its own padding, so the icon — not the hit
-              // area — lands on the column.
-              className="pointer-events-auto absolute -right-0.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover/slim:opacity-100"
-            >
-              <Icon
-                name={shelf === "snoozed" ? "Clock" : "ArrowTurnBackward"}
-                className="size-3.5"
-              />
-            </button>
+            {/* An invisible button still takes a tap, so a compact row
+                leaves restore to its menu. */}
+            {compact ? null : (
+              <button
+                type="button"
+                aria-label={
+                  shelf === "snoozed" ? "Wake thread now" : "Un-settle thread"
+                }
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onRestore();
+                }}
+                // Pulled right by its own padding, so the icon — not the hit
+                // area — lands on the column.
+                className="pointer-events-auto absolute -right-0.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover/slim:opacity-100"
+              >
+                <Icon
+                  name={shelf === "snoozed" ? "Clock" : "ArrowTurnBackward"}
+                  className="size-3.5"
+                />
+              </button>
+            )}
           </span>
         </div>
-      </li>
-    </RowContextMenu>
+      </RowContextMenu>
+      {compact ? <RowActionsMenu {...menu} /> : null}
+    </li>
   );
 }
