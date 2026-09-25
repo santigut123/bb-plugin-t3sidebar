@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   experimental_useSidebarThreadActions as useSidebarThreadActions,
   experimental_useSidebarThreads as useSidebarThreads,
@@ -8,7 +9,14 @@ import {
   type PluginThreadListProps,
 } from "@get-bb/plugin-sdk/app";
 import { Icon } from "./components/Icon";
+import { usePortalScopeProps } from "./lib/portal-scope";
 import { cn } from "./lib/utils";
+import {
+  ActionsMenu,
+  MENU_CONTENT_CLASS,
+  MenuItem,
+  type MenuKit,
+} from "./menu";
 import { ThreadCard } from "./ThreadCard";
 import { SlimRow } from "./SlimRow";
 import { useLifecycle, isWorking } from "./useLifecycle";
@@ -49,6 +57,7 @@ import {
  */
 export function ThreadInbox({
   activeThreadId,
+  isCompactViewport,
   onNavigate,
   searchQuery,
 }: PluginThreadListProps) {
@@ -329,12 +338,14 @@ export function ThreadInbox({
     onSnooze: (until: number) => lifecycle.snooze(thread.id, until),
     workspaces,
     now,
+    compact: isCompactViewport,
   });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <WorkspaceTabs
         activeWorkspaceId={activeWorkspace?.id ?? null}
+        compact={isCompactViewport}
         onActiveWorkspaceChange={setActiveWorkspaceId}
         projects={projects}
         threads={threads}
@@ -404,6 +415,7 @@ export function ThreadInbox({
               projectColors={projectColors}
               workspaces={workspaces}
               onNavigate={onNavigate}
+              compact={isCompactViewport}
             />
             <ParkedShelf
               label="Settled"
@@ -429,6 +441,7 @@ export function ThreadInbox({
               projectColors={projectColors}
               workspaces={workspaces}
               onNavigate={onNavigate}
+              compact={isCompactViewport}
             />
           </>
         )}
@@ -473,6 +486,7 @@ function ParkedShelf({
   projectColors,
   workspaces,
   onNavigate,
+  compact,
 }: {
   label: string;
   threads: readonly PluginSidebarThread[];
@@ -488,7 +502,9 @@ function ParkedShelf({
   projectColors: ReturnType<typeof useProjectColors>;
   workspaces: ReturnType<typeof useWorkspaces>;
   onNavigate: () => void;
+  compact: boolean;
 }) {
+  const portalScope = usePortalScopeProps();
   if (threads.length === 0) return null;
   const now = Date.now();
   const header = (
@@ -497,7 +513,12 @@ function ParkedShelf({
       onClick={onToggle}
       aria-expanded={expanded}
       aria-label={`${expanded ? "Collapse" : "Expand"} ${label.toLowerCase()} threads`}
-      className="mt-3 flex w-full items-center gap-2 px-2.5 pb-1 text-left"
+      className={cn(
+        "flex w-full items-center gap-2 pl-2.5 text-left",
+        // Compact rows keep a column for their actions button; the chevron
+        // stays over the status column instead of drifting into it.
+        compact ? "mt-2 min-h-9 pr-11" : "mt-3 pb-1 pr-2.5",
+      )}
     >
       <span className="text-2xs font-medium text-muted-foreground/70">
         {expanded ? label : `${label} (${threads.length})`}
@@ -516,25 +537,33 @@ function ParkedShelf({
   );
   return (
     <section aria-label={label}>
-      {onArchiveAll ? (
+      {onArchiveAll === undefined ? (
+        header
+      ) : compact ? (
+        // A touch screen cannot right-click the label, so the shelf's
+        // actions sit behind the same button every row has.
+        <div className="relative">
+          {header}
+          <ActionsMenu
+            label={`${label} actions`}
+            className="absolute bottom-0 right-0.5"
+          >
+            <ShelfMenuItems kit={DropdownMenu} onArchiveAll={onArchiveAll} />
+          </ActionsMenu>
+        </div>
+      ) : (
         <ContextMenu.Root>
           <ContextMenu.Trigger asChild>{header}</ContextMenu.Trigger>
           <ContextMenu.Portal>
             <ContextMenu.Content
-              aria-label="Settled actions"
-              className="z-50 min-w-36 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
+              {...portalScope}
+              aria-label={`${label} actions`}
+              className={cn(MENU_CONTENT_CLASS, "min-w-36")}
             >
-              <ContextMenu.Item
-                onSelect={onArchiveAll}
-                className="cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
-              >
-                Archive all
-              </ContextMenu.Item>
+              <ShelfMenuItems kit={ContextMenu} onArchiveAll={onArchiveAll} />
             </ContextMenu.Content>
           </ContextMenu.Portal>
         </ContextMenu.Root>
-      ) : (
-        header
       )}
       {expanded ? (
         <ul
@@ -565,6 +594,7 @@ function ParkedShelf({
               now={now}
               animateStatusIcons={animateStatusIcons}
               onNavigate={onNavigate}
+              compact={compact}
               onRestore={() =>
                 shelf === "snoozed"
                   ? lifecycle.unsnooze(thread.id)
@@ -575,6 +605,20 @@ function ParkedShelf({
         </ul>
       ) : null}
     </section>
+  );
+}
+
+function ShelfMenuItems({
+  kit,
+  onArchiveAll,
+}: {
+  kit: MenuKit;
+  onArchiveAll: () => void;
+}) {
+  return (
+    <MenuItem kit={kit} onSelect={onArchiveAll}>
+      Archive all
+    </MenuItem>
   );
 }
 

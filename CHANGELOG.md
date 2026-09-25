@@ -13,8 +13,18 @@
 - Workspace context menus can hide their threads from All projects while
   keeping every workspace selectable and visibly marking hidden workspaces in
   the unfiltered view.
+- Phones and touch screens get an always-visible **⋯** button on every thread,
+  on the Settled shelf, and on the selected workspace. It opens the same
+  actions as right-click, so settling, snoozing, un-settling, waking, and
+  archiving no longer depend on hover or right-click.
+- Thread menus now include **Settle** and a **Snooze** submenu with every
+  preset; parked threads offer **Un-settle** or **Wake now**.
 
 ### Changed
+
+- On compact viewports, rows, shelf headers, and workspace tabs are taller,
+  menu items grow under a coarse pointer, "Open in split" is hidden, and a
+  settled row no longer hides a tappable restore button over its age.
 
 - When a thread starts working, its parent/child family moves to the top of its
   shelf and keeps that position after finishing. Families containing a pinned

@@ -40,6 +40,14 @@ shows that workspace's complete thread membership. Use **Show in All projects**
 from the same menu to restore the threads. This preference is stored with the
 workspace and shared across bb clients.
 
+## Phones and touch screens
+
+A finger has no hover and no right-click, so on bb's compact viewport every
+thread shows a **⋯** button instead. It opens the same menu as right-click,
+including **Settle**, **Snooze**, and, on a parked thread, **Un-settle** or
+**Wake now**. The Settled shelf header has one for **Archive all**, and the
+selected workspace tab gets one for its edit and visibility actions.
+
 ## The idea
 
 Pinned threads stay above the rest. When an unpinned thread starts working, its

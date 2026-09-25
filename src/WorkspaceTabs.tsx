@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type {
   PluginSidebarProject,
   PluginSidebarThread,
@@ -7,18 +8,27 @@ import type {
 import { Icon } from "./components/Icon";
 import { usePortalScopeProps } from "./lib/portal-scope";
 import { cn } from "./lib/utils";
+import {
+  ActionsMenu,
+  MENU_CONTENT_CLASS,
+  MenuItem,
+  type MenuKit,
+} from "./menu";
 import { hashHue, projectAccentFromHue } from "./project-colors";
 import type { Workspace, WorkspacesApi } from "./useWorkspaces";
 import { WorkspaceEditor } from "./WorkspaceEditor";
 
 export function WorkspaceTabs({
   activeWorkspaceId,
+  compact,
   onActiveWorkspaceChange,
   projects,
   threads,
   workspaces,
 }: {
   activeWorkspaceId: string | null;
+  /** Phone-width or touch: a taller rail, and tab actions on a button. */
+  compact: boolean;
   onActiveWorkspaceChange(workspaceId: string | null): void;
   projects: readonly PluginSidebarProject[];
   threads: readonly PluginSidebarThread[];
@@ -30,10 +40,40 @@ export function WorkspaceTabs({
   const workspaceButtons = useRef(new Map<string, HTMLButtonElement>());
   const [visibilityError, setVisibilityError] = useState<string | null>(null);
   const portalScope = usePortalScopeProps();
+  const activeWorkspace =
+    workspaces.workspaces.find(
+      (workspace) => workspace.id === activeWorkspaceId,
+    ) ?? null;
+
+  const editWorkspace = (workspace: Workspace) => {
+    editorTrigger.current =
+      workspaceButtons.current.get(workspace.id) ?? null;
+    setEditor(workspace);
+  };
+  const toggleHiddenFromAll = (workspace: Workspace) => {
+    setVisibilityError(null);
+    void workspaces
+      .setHiddenFromAll({
+        workspaceId: workspace.id,
+        hiddenFromAll: !workspace.hiddenFromAll,
+      })
+      .catch((reason: unknown) => {
+        setVisibilityError(
+          reason instanceof Error
+            ? reason.message
+            : "Could not update workspace visibility.",
+        );
+      });
+  };
 
   return (
     <>
-      <div className="flex h-9 shrink-0 border-b border-sidebar-border/60 px-1.5">
+      <div
+        className={cn(
+          "flex shrink-0 border-b border-sidebar-border/60 px-1.5",
+          compact ? "h-11" : "h-9",
+        )}
+      >
         <div
           className="flex min-w-0 flex-1 items-stretch overflow-x-auto"
           role="group"
@@ -103,40 +143,14 @@ export function WorkspaceTabs({
                     <ContextMenu.Content
                       {...portalScope}
                       aria-label={`${workspace.name} workspace actions`}
-                      className="z-50 min-w-40 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md"
+                      className={cn(MENU_CONTENT_CLASS, "min-w-40")}
                     >
-                      <ContextMenu.Item
-                        className="cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
-                        onSelect={() => {
-                          editorTrigger.current =
-                            workspaceButtons.current.get(workspace.id) ?? null;
-                          setEditor(workspace);
-                        }}
-                      >
-                        Edit workspace
-                      </ContextMenu.Item>
-                      <ContextMenu.Item
-                        className="cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
-                        onSelect={() => {
-                          setVisibilityError(null);
-                          void workspaces
-                            .setHiddenFromAll({
-                              workspaceId: workspace.id,
-                              hiddenFromAll: !workspace.hiddenFromAll,
-                            })
-                            .catch((reason: unknown) => {
-                              setVisibilityError(
-                                reason instanceof Error
-                                  ? reason.message
-                                  : "Could not update workspace visibility.",
-                              );
-                            });
-                        }}
-                      >
-                        {workspace.hiddenFromAll
-                          ? "Show in All projects"
-                          : "Hide from All projects"}
-                      </ContextMenu.Item>
+                      <WorkspaceMenuItems
+                        kit={ContextMenu}
+                        workspace={workspace}
+                        onEdit={() => editWorkspace(workspace)}
+                        onToggleHidden={() => toggleHiddenFromAll(workspace)}
+                      />
                     </ContextMenu.Content>
                   </ContextMenu.Portal>
                 </ContextMenu.Root>
@@ -144,11 +158,29 @@ export function WorkspaceTabs({
             })
           )}
         </div>
+        {/* A tab cannot be right-clicked with a finger, so the selected
+            workspace's actions get a button of their own. */}
+        {compact && activeWorkspace !== null ? (
+          <ActionsMenu
+            label={`${activeWorkspace.name} workspace actions`}
+            className="ml-1 self-center"
+          >
+            <WorkspaceMenuItems
+              kit={DropdownMenu}
+              workspace={activeWorkspace}
+              onEdit={() => editWorkspace(activeWorkspace)}
+              onToggleHidden={() => toggleHiddenFromAll(activeWorkspace)}
+            />
+          </ActionsMenu>
+        ) : null}
         <button
           ref={addWorkspaceButton}
           type="button"
           aria-label="Add workspace"
-          className="ml-1 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+          className={cn(
+            "ml-1 flex shrink-0 items-center justify-center self-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+            compact ? "size-9" : "size-8",
+          )}
           onClick={(event) => {
             editorTrigger.current = event.currentTarget;
             setEditor("new");
@@ -189,6 +221,31 @@ export function WorkspaceTabs({
           }}
         />
       ) : null}
+    </>
+  );
+}
+
+function WorkspaceMenuItems({
+  kit,
+  workspace,
+  onEdit,
+  onToggleHidden,
+}: {
+  kit: MenuKit;
+  workspace: Workspace;
+  onEdit: () => void;
+  onToggleHidden: () => void;
+}) {
+  return (
+    <>
+      <MenuItem kit={kit} onSelect={onEdit}>
+        Edit workspace
+      </MenuItem>
+      <MenuItem kit={kit} onSelect={onToggleHidden}>
+        {workspace.hiddenFromAll
+          ? "Show in All projects"
+          : "Hide from All projects"}
+      </MenuItem>
     </>
   );
 }

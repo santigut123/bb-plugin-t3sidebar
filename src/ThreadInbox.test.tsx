@@ -1258,6 +1258,8 @@ describe("row context menu", () => {
         .map((item) => item.textContent),
     ).toEqual([
       "Open in split",
+      "Settle",
+      "Snooze",
       "Mark unread",
       "Pin",
       "bb color",
@@ -1480,6 +1482,153 @@ describe("row context menu", () => {
       name: "Project color swatch",
     });
     expect(within(colorGroup).getAllByRole("menuitemradio")).toHaveLength(16);
+  });
+});
+
+describe("compact viewport", () => {
+  const compactProps = { ...listProps, isCompactViewport: true };
+  const settledRow = (threadId: string) => ({
+    threadId,
+    settledAt: 200,
+    snoozedUntil: null,
+    snoozedAt: null,
+  });
+
+  function renderCompact(
+    threads: PluginSidebarThread[],
+    rpc: Record<string, (...args: unknown[]) => unknown> = {},
+  ) {
+    return renderSlot(inbox, compactProps, {
+      sidebarThreads: {
+        status: "ready",
+        threads,
+        projects: [{ id: "proj_1", name: "bb", isPersonal: false }],
+      },
+      rpc: testRpc(rpc),
+      settings: testSettings(),
+    });
+  }
+
+  async function openActions(name: string) {
+    fireEvent.click(await screen.findByRole("button", { name }));
+    return screen.findByRole("menu", { name });
+  }
+
+  it("puts park actions behind a visible button instead of hover", async () => {
+    let settled: string | null = null;
+    renderCompact([thread({ id: "thr_park", title: "Quiet" })], {
+      settle: (input) => {
+        settled = (input as { threadId: string }).threadId;
+        return { ok: true };
+      },
+    });
+    const menu = await openActions("Actions for Quiet");
+    // A finger has no hover, so the hover buttons would never show.
+    expect(screen.queryByLabelText("Settle thread")).toBeNull();
+    // Nor does a phone have a split to open into.
+    expect(within(menu).queryByText("Open in split")).toBeNull();
+    fireEvent.click(within(menu).getByText("Settle"));
+    await waitFor(() => expect(settled).toBe("thr_park"));
+  });
+
+  it("snoozes from the actions menu", async () => {
+    let snoozedUntil: number | null = null;
+    renderCompact([thread({ id: "thr_park", title: "Quiet" })], {
+      snooze: (input) => {
+        snoozedUntil = (input as { snoozedUntil: number }).snoozedUntil;
+        return { ok: true };
+      },
+    });
+    const menu = await openActions("Actions for Quiet");
+    fireEvent.click(within(menu).getByText("Snooze"));
+    const presets = await screen.findByRole("menu", { name: "Snooze" });
+    fireEvent.click(within(presets).getByText("Tomorrow"));
+    await waitFor(() => expect(snoozedUntil).toBeGreaterThan(Date.now()));
+  });
+
+  it("offers no park action on a working thread", async () => {
+    renderCompact([
+      thread({ id: "thr_busy", title: "Still running", indicator: "runtime" }),
+    ]);
+    const menu = await openActions("Actions for Still running");
+    expect(within(menu).queryByText("Settle")).toBeNull();
+    expect(within(menu).queryByText("Snooze")).toBeNull();
+  });
+
+  it("restores a settled thread from its actions menu", async () => {
+    let restored: string | null = null;
+    renderCompact([thread({ id: "thr_done", title: "Finished work" })], {
+      listLifecycle: () => ({ rows: [settledRow("thr_done")] }),
+      unsettle: (input) => {
+        restored = (input as { threadId: string }).threadId;
+        return { ok: true };
+      },
+    });
+    const shelf = await screen.findByRole("region", { name: "Settled" });
+    fireEvent.click(
+      within(shelf).getByRole("button", { name: "Expand settled threads" }),
+    );
+    // The desktop restore button is invisible until hover, yet a tap would
+    // still land on it — a compact row leaves restore to its menu.
+    expect(within(shelf).queryByLabelText("Un-settle thread")).toBeNull();
+    const menu = await openActions("Actions for Finished work");
+    fireEvent.click(within(menu).getByText("Un-settle"));
+    await waitFor(() => expect(restored).toBe("thr_done"));
+  });
+
+  it("archives the settled shelf from a visible button", async () => {
+    const rendered = renderCompact(
+      [
+        thread({ id: "thr_done_1", title: "First finished thread" }),
+        thread({ id: "thr_done_2", title: "Second finished thread" }),
+      ],
+      {
+        listLifecycle: () => ({
+          rows: [settledRow("thr_done_1"), settledRow("thr_done_2")],
+        }),
+      },
+    );
+    const shelf = await screen.findByRole("region", { name: "Settled" });
+    fireEvent.click(
+      within(shelf).getByRole("button", { name: "Settled actions" }),
+    );
+    const menu = await screen.findByRole("menu", { name: "Settled actions" });
+    fireEvent.click(within(menu).getByText("Archive all"));
+    expect(rendered.sidebarActionCalls).toEqual(
+      expect.arrayContaining([
+        { method: "archive", threadId: "thr_done_1" },
+        { method: "archive", threadId: "thr_done_2" },
+      ]),
+    );
+  });
+
+  it("edits the selected workspace from a visible button", async () => {
+    renderCompact([thread({ id: "thr_1", title: "Landing thread" })], {
+      listWorkspaces: () => ({
+        workspaces: [
+          {
+            id: "workspace_landing",
+            name: "Landing",
+            projectIds: ["proj_1"],
+            threadIds: ["thr_1"],
+          },
+        ],
+      }),
+    });
+    const tab = await screen.findByRole("button", { name: "Landing" });
+    // Nothing to act on until a workspace is selected.
+    expect(
+      screen.queryByRole("button", { name: "Landing workspace actions" }),
+    ).toBeNull();
+    fireEvent.click(tab);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Landing workspace actions" }),
+    );
+    const menu = await screen.findByRole("menu", {
+      name: "Landing workspace actions",
+    });
+    fireEvent.click(within(menu).getByText("Edit workspace"));
+    expect(screen.getByRole("dialog", { name: "Edit workspace" })).toBeDefined();
   });
 });
 

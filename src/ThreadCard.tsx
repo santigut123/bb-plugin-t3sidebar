@@ -6,7 +6,11 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { Icon, type IconName } from "./components/Icon";
 import { cn } from "./lib/utils";
-import { RowContextMenu } from "./RowContextMenu";
+import {
+  RowActionsMenu,
+  RowContextMenu,
+  type ThreadMenuProps,
+} from "./RowContextMenu";
 import { ProviderGlyph } from "./ProviderGlyph";
 import { STATUS_SLOT_CLASS, StatusOrTime } from "./StatusSlot";
 import { threadDisplayTitle } from "./inbox";
@@ -28,6 +32,9 @@ import {
  * The row is a positioned container with a full-bleed anchor UNDER the
  * controls, the way bb's own thread row does it: a `<button>` inside an `<a>`
  * is invalid interactive nesting and breaks keyboard behaviour.
+ *
+ * A finger has no hover and no right-click, so a compact card trades the
+ * hover park buttons for an always-visible actions button.
  */
 export function ThreadCard({
   thread,
@@ -53,6 +60,7 @@ export function ThreadCard({
   onSnooze,
   workspaces,
   now,
+  compact,
 }: {
   thread: PluginSidebarThread;
   projectName: string | null;
@@ -82,23 +90,29 @@ export function ThreadCard({
   workspaces: WorkspacesApi;
   /** Quantized clock, so every card in one render agrees on "now". */
   now: number;
+  /** Phone-width or touch, from the host's `isCompactViewport`. */
+  compact: boolean;
 }) {
   const actions = useSidebarThreadActions();
   const { splitProps, layout } = useSidebarThreadSplit(thread.id);
   // Opt-in per row: this costs a git-host lookup, and threads sharing a
   // worktree share one.
   const { pullRequest } = useSidebarThreadPullRequest(thread.id);
+  const menu: ThreadMenuProps = {
+    thread,
+    projectName,
+    projectHue: projectAccent.hue,
+    hasCustomProjectColor,
+    onSetProjectColor,
+    onResetProjectColor,
+    workspaces,
+    parking: { shelf: "active", canPark, onSettle, onSnooze },
+    compact,
+  };
+  const showParkButtons = canPark && !compact;
 
   return (
-    <RowContextMenu
-      thread={thread}
-      projectName={projectName}
-      projectHue={projectAccent.hue}
-      hasCustomProjectColor={hasCustomProjectColor}
-      onSetProjectColor={onSetProjectColor}
-      onResetProjectColor={onResetProjectColor}
-      workspaces={workspaces}
-    >
+    <RowContextMenu {...menu}>
       <li
         className={cn(
           "list-none",
@@ -108,6 +122,9 @@ export function ThreadCard({
         <div
           className={cn(
             "group/card relative overflow-hidden rounded-md py-2 pl-3 pr-2.5 transition-[background-color,opacity]",
+            // Room for the actions button, and no text selection when a long
+            // press opens the menu instead.
+            compact && "select-none pr-11",
             isActive ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
             !isActive && !thread.isUnread &&
               (isWorking || thread.hasPendingInteraction) &&
@@ -151,7 +168,7 @@ export function ThreadCard({
             </span>
             {/* Status at rest, park actions on hover. Only the status yields,
                 so the project name never shifts. */}
-            {canPark ? (
+            {showParkButtons ? (
               <span className="pointer-events-auto hidden items-center gap-0.5 group-hover/card:flex">
                 <ParkButton
                   label="Snooze until tomorrow"
@@ -170,7 +187,7 @@ export function ThreadCard({
             <span
               className={cn(
                 STATUS_SLOT_CLASS,
-                canPark && "group-hover/card:hidden",
+                showParkButtons && "group-hover/card:hidden",
               )}
             >
               <StatusOrTime
@@ -252,7 +269,11 @@ export function ThreadCard({
                   event.stopPropagation();
                   onToggleChildren();
                 }}
-                className="pointer-events-auto flex shrink-0 items-center gap-0.5 rounded px-0.5 text-2xs text-muted-foreground hover:text-foreground"
+                className={cn(
+                  "pointer-events-auto flex shrink-0 items-center gap-0.5 rounded px-0.5 text-2xs text-muted-foreground hover:text-foreground",
+                  // A bigger target for a finger, without growing the line.
+                  compact && "-my-2 px-1.5 py-2",
+                )}
               >
                 <Icon
                   name="ChevronDown"
@@ -266,6 +287,12 @@ export function ThreadCard({
               </button>
             ) : null}
           </div>
+          {compact ? (
+            <RowActionsMenu
+              {...menu}
+              className="absolute right-0.5 top-1/2 z-[2] -translate-y-1/2"
+            />
+          ) : null}
         </div>
       </li>
     </RowContextMenu>
